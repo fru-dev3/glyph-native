@@ -30,7 +30,7 @@ cp assets/icons/icon-*.png assets/icons/mark-*.png "$APP/Contents/Resources/"
 cp scripts/install-release.sh "$APP/Contents/Resources/"
 # The repo's main checkout (the first worktree), never a short-lived one: Install All fetches it and
 # builds from a fresh worktree of origin/main that it removes after.
-REPO=$(git -C .. worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')
+REPO=$(git -C .. worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p') || true   # not inside a git repo at all: the public copy
 [[ -n $REPO ]] || REPO=$(cd .. && pwd)
 
 # GLYPH_NATIVE_RELEASE=1: the public build. No source checkout is baked in, which is what puts the app
