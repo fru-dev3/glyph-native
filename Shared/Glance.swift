@@ -25,8 +25,10 @@ public enum Glances {
         let sessions = TimeLog.sessions(TimeLog.events(in: data))
         let day = calendar.startOfDay(for: now)
         let today = TimeLog.totals(sessions, from: day, to: now, now: now).reduce(0) { $0 + $1.seconds }
-        // ponytail: a session open for more than 18 hours was left running somewhere; it is not "now".
-        if let s = sessions.last(where: { $0.end == nil && $0.pausedSince == nil && now.timeIntervalSince($0.start) < 18 * 3600 }) {
+        // The card is for a clock that is actually counting, so the paused ones are out before
+        // the question is asked: another device may be running one while this one sits paused.
+        // How long an open session stays "now" is TimeLog's answer, shared with Glyph Time.
+        if let s = TimeLog.open(sessions.filter { $0.pausedSince == nil }, now: now) {
             let active = s.active(at: now)
             let name = s.project ?? "Untitled"
             return (Glance("\(hm(today)) today", detail: "\(name) running"),

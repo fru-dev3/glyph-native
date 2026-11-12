@@ -11,13 +11,15 @@ struct GlyphNativeApp: App {
     @StateObject private var today = Today()
     var body: some Scene {
         WindowGroup("Glyph Labs") {
-            ShelfView().environmentObject(shelf).environmentObject(today).frame(minWidth: 940, minHeight: 620).tint(.nativeGreen)
+            RootView()
+                .environmentObject(shelf).environmentObject(today)
+                .frame(minWidth: Shelf.releaseMode ? 1040 : 940, minHeight: Shelf.releaseMode ? 680 : 620).tint(.nativeGreen)
                 .task { shelf.refresh(); shelf.fetch(); today.refresh(); UITest.shelf = shelf; UITest.today = today }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in shelf.refresh(); today.refresh() }
                 .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { _ in today.refresh() }
         }
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 1180, height: Shelf.releaseMode ? 620 : 860)   // five cards need less than a family of eleven and a clock
+        .defaultSize(width: Shelf.releaseMode ? 1280 : 1180, height: Shelf.releaseMode ? 820 : 860)
         .commands {
             CommandGroup(replacing: .appSettings) { Button("Settings…") { shelf.showSettings = true }.keyboardShortcut(",") }
         }
@@ -30,7 +32,25 @@ final class Delegate: NSObject, NSApplicationDelegate {
         // `GlyphNative --picture <folder>`: the window as it opens, saved as window.png, then quit (the site's screenshot).
         if let i = CommandLine.arguments.firstIndex(of: "--picture"), i + 1 < CommandLine.arguments.count {
             UITest.out = URL(fileURLWithPath: CommandLine.arguments[i + 1])
-            Task { try? await Task.sleep(for: .seconds(6)); UITest.picture("window", UITest.window); exit(0) }
+            // `--appearance light|dark` (with --picture only): force the system look for the picture.
+            if let a = PictureArgs.value("--appearance") { NSApp.appearance = NSAppearance(named: a == "dark" ? .darkAqua : .aqua) }
+            // `--size 1040x680` (with --picture only): the window at that content size, for the minimum-size picture.
+            let size = CommandLine.arguments.firstIndex(of: "--size").flatMap { j in
+                j + 1 < CommandLine.arguments.count ? CommandLine.arguments[j + 1].split(separator: "x").compactMap { Double($0) } : nil }
+            Task {
+                if let size, size.count == 2 { try? await Task.sleep(for: .seconds(1.5)); UITest.window?.setContentSize(NSSize(width: size[0], height: size[1])) }
+                // `--do install:<id>` / `--do uninstall:<id>` run the buttons' own code after 2s; `--after <s>` times the picture.
+                if let d = CommandLine.arguments.firstIndex(of: "--do").map({ CommandLine.arguments[$0 + 1] }) {
+                    try? await Task.sleep(for: .seconds(2))
+                    await MainActor.run {
+                        let p = d.split(separator: ":").map(String.init)
+                        if p.count == 2, let sh = UITest.shelf, let r = sh.rows.first(where: { $0.app.id == p[1] }) {
+                            if p[0] == "install" { sh.install(r) } else { sh.uninstall(r, confirm: false) }
+                        }
+                    }
+                }
+                let after = CommandLine.arguments.firstIndex(of: "--after").flatMap { Double(CommandLine.arguments[$0 + 1]) } ?? 6
+                try? await Task.sleep(for: .seconds(after)); UITest.picture("window", UITest.window); exit(0) }
         }
         // `GlyphNative --rows`: what the window would list (installed version, version on main), then quit.
         if CommandLine.arguments.contains("--rows") {
@@ -75,6 +95,13 @@ enum Token {
     static let faint = Color.token(.hex(0x6E6E73), .tertiaryLabelColor)
     /// Green on dark: section headings and what is waiting. Office green itself is too dark to read there.
     static let accentLight = Color.token(.hex(0x4AA96C), .hex(0x008000))
+    // The release window's extra tokens (dark values from its approved artboard).
+    static let sidebar = Color.token(.hex(0x161618), NSColor(calibratedWhite: 0, alpha: 0.035))
+    static let border = Color.token(.hex(0x2C2C2E), NSColor(calibratedWhite: 0, alpha: 0.1))
+    static let rowText = Color.token(.hex(0xE6E6EA), .labelColor)
+    static let tint = Color.token(.hex(0x10240F), NSColor(srgbRed: 0, green: 0.5, blue: 0, alpha: 0.12))
+    static let tintBorder = Color.token(.hex(0x27512F), NSColor(srgbRed: 0, green: 0.5, blue: 0, alpha: 0.3))
+    static let tintText = Color.token(.hex(0x7FD49A), .hex(0x0A6B0A))
     static let headingMeta = Color.token(.hex(0x6A9E7A), .hex(0x4B7A58))
 }
 
@@ -89,7 +116,10 @@ final class Shelf: ObservableObject {
         var release = false         // public build: `here` is the newest GitHub release, not a repo's main
         var looked = false          // release mode: GitHub has been asked
         var id: String { app.id }
-        var canInstall: Bool { release ? here != nil : app.folder != nil && here != nil && !app.ownInstall }
+        var canInstall: Bool { release ? here != nil && hasDownload : app.folder != nil && here != nil && !app.ownInstall }
+        var released: ReleasedApp? { release ? Release.apps.first { $0.id == app.id } : nil }
+        var hasDownload: Bool { !release || released?.hasDownload == true }
+        var site: URL? { released?.site.flatMap { URL(string: $0) } }
         // A release is only an update when it is newer; a source build treats any difference as one.
         var needsUpdate: Bool {
             guard let i = installed, let h = here else { return false }
@@ -100,7 +130,17 @@ final class Shelf: ObservableObject {
     @Published var running: String?          // what is being installed now
     @Published var log = ""
     @Published var lastResult: Bool?
+    @Published var uiHover: String?          // a UI test's stand-in for the pointer resting on a card
+    @Published var lastChecked: Date?        // when the last GitHub check finished
     @Published var showSettings = false      // the gear and Cmd-,
+    @Published var notes: [String: String] = [:]   // app id to a short line on its card for a few seconds
+    private var noteSeq: [String: Int] = [:]
+
+    /// Shows `text` on the card for 4 seconds, then lets the card say what is true again.
+    func say(_ id: String, _ text: String) {
+        notes[id] = text; let n = (noteSeq[id] ?? 0) + 1; noteSeq[id] = n
+        Task { try? await Task.sleep(for: .seconds(4)); if noteSeq[id] == n { notes[id] = nil } }
+    }
 
     /// This repo: baked in by scripts/build.sh; GLYPH_NATIVE_REPO overrides (the UI check).
     static var repo: URL? {
@@ -121,7 +161,7 @@ final class Shelf: ObservableObject {
             if Self.releaseMode { r.here = latest[a.id] }
             if let b = a.macBundle, let url = installedURL(b) {
                 r.path = url
-                r.installed = Self.info(url)?["CFBundleShortVersionString"] as? String ?? "?"
+                r.installed = Release.installedVersion(Self.info(url))
             }
             if let f = a.folder, let s = Self.mainFile("\(f)/scripts/build.sh"),
                let line = s.split(separator: "\n").first(where: { $0.hasPrefix("VERSION=") }) {
@@ -164,9 +204,9 @@ final class Shelf: ObservableObject {
         Task {
             var found: [String: String] = [:]
             await withTaskGroup(of: (String, String?).self) { g in
-                for a in Release.apps {
+                for a in Release.apps where a.hasDownload {
                     g.addTask {
-                        var req = URLRequest(url: a.latestURL, timeoutInterval: 15)
+                        var req = URLRequest(url: a.latestURL!, timeoutInterval: 15)
                         req.httpMethod = "HEAD"
                         let url = (try? await URLSession.shared.data(for: req))?.1.url
                         return (a.id, url.flatMap(Release.tag(from:)))
@@ -174,13 +214,13 @@ final class Shelf: ObservableObject {
                 }
                 for await (id, v) in g { if let v { found[id] = v } }
             }
-            latest = found; looked = true; refresh()
+            latest = found; looked = true; lastChecked = .now; refresh()
         }
     }
 
     private func installedURL(_ bundle: String) -> URL? {
         if ProcessInfo.processInfo.environment["GLYPH_NATIVE_APPS"] == nil, let u = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle),
-           u.path.hasPrefix("/Applications") { return u }
+           u.path.hasPrefix("/Applications"), Self.info(u) != nil { return u }   // LaunchServices keeps the path of an app already trashed
         let dir = Self.apps
         for name in (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? [] where name.hasSuffix(".app") {
             let u = dir.appending(path: name)
@@ -212,8 +252,8 @@ final class Shelf: ObservableObject {
             script = "install-release.sh"
             let tool = Bundle.main.path(forResource: "install-release", ofType: "sh") ?? "install-release.sh"
             let team = Release.ownTeam().map { " --team '\($0)'" } ?? ""
-            let lines = Release.apps.filter { args.contains($0.id) }.map { a in
-                "echo '== \(a.name)'; '\(tool)' --repo '\(a.repo)' --asset '\(a.asset)' --bundle '\(a.macBundle)' --apps '\(Self.apps.path)'\(team) || rc=1"
+            let lines = Release.apps.filter { args.contains($0.id) && $0.hasDownload }.map { a in
+                "echo '== \(a.name)'; '\(tool)' --repo '\(a.repo!)' --asset '\(a.asset!)' --bundle '\(a.macBundle ?? "")' --apps '\(Self.apps.path)'\(team) || rc=1"
             }
             p.arguments = ["-c", "rc=0\n" + lines.joined(separator: "\n") + "\nexit $rc"]
         } else if let stand = ProcessInfo.processInfo.environment["GLYPH_NATIVE_SCRIPT"] {   // the UI check's stand-in installer
@@ -259,6 +299,36 @@ final class Shelf: ObservableObject {
         if Self.releaseMode { run("Installing \(r.app.name)", [r.app.id]); return }
         if let f = r.app.folder { run("Installing \(r.app.name)", ["--mac", "--only", f]) } }
     func installPhone() { run("Installing on the iPhone", ["--iphone"]) }
+    /// Moves an installed app to the Trash (recoverable) after one question; never a running app, never this one.
+    func uninstall(_ r: Row, confirm: Bool = true) {
+        guard running == nil, let url = r.path else { return }
+        let name = r.app.name
+        let verdict = Uninstall.check(installed: true,
+            running: r.app.macBundle.map { !NSRunningApplication.runningApplications(withBundleIdentifier: $0).isEmpty } ?? false,
+            bundle: r.app.macBundle, launcherBundle: Bundle.main.bundleIdentifier)
+        switch verdict {
+        case .launcher, .notInstalled: return
+        case .running: say(r.app.id, "Quit \(name) first."); return
+        case .allowed: break
+        }
+        if confirm {
+            let a = NSAlert()
+            a.messageText = "Move \(name) to the Trash?"
+            a.informativeText = "Your vault and the app's data are not touched."
+            a.addButton(withTitle: "Move to Trash"); a.addButton(withTitle: "Cancel")
+            guard a.runModal() == .alertFirstButtonReturn else { return }
+        }
+        NSWorkspace.shared.recycle([url]) { _, error in
+            Task { @MainActor in
+                if let error {
+                    self.log = "Couldn't move \(name) to the Trash: \(error.localizedDescription)"; self.lastResult = false
+                } else {
+                    self.say(r.app.id, "Moved to the Trash")   // the card is the not-installed card at once, no log panel
+                }
+                self.refresh()
+            }
+        }
+    }
     func open(_ r: Row) { if let u = r.path { NSWorkspace.shared.openApplication(at: u, configuration: .init()) } }
 }
 
@@ -269,8 +339,6 @@ final class Shelf: ObservableObject {
 struct ShelfView: View {
     @EnvironmentObject var shelf: Shelf
     @EnvironmentObject var today: Today
-    @State private var showLog = false
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -278,7 +346,7 @@ struct ShelfView: View {
                 if !Shelf.releaseMode { Hero() }
                 apps
                 if !Shelf.releaseMode { iphone }
-                if shelf.running != nil || shelf.lastResult != nil { logView }
+                if shelf.running != nil || shelf.lastResult != nil { LogPanel() }
             }
             .padding(.horizontal, 36).padding(.top, 44).padding(.bottom, 40)
             .frame(maxWidth: 1240).frame(maxWidth: .infinity)   // centred on a wide window, never pinned left
@@ -369,7 +437,14 @@ struct ShelfView: View {
         .glyphCard()
     }
 
-    private var logView: some View {
+}
+
+/// The install log panel, shared by both windows.
+struct LogPanel: View {
+    @EnvironmentObject var shelf: Shelf
+    @State private var showLog = false
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 if let ok = shelf.lastResult {

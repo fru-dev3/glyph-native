@@ -86,6 +86,7 @@ public struct GlyphComposer: View {
     @State private var recording = false
     /// The family's photo-or-file choice, for a screen that named no attach action of its own.
     @State private var choosing = false
+    @State private var taking = false
     /// Why the mic is not hearing anything, shown over the bar. Without it the mic is a control
     /// that can fail in silence: iOS refuses the microphone, or the speech model is still coming
     /// down, and all a tap does is nothing.
@@ -151,22 +152,42 @@ public struct GlyphComposer: View {
         .background(page.opacity(0.96).ignoresSafeArea())
     }
 
+    /// The plus. A screen with its own action gets a plain button; otherwise a menu: take a photo
+    /// (only where there is a camera) or choose a file or photo.
+    @ViewBuilder private var plus: some View {
+        let disc = plusDisc
+        if let attach {
+            Button { attach() } label: { disc }
+                .buttonStyle(.plain).accessibilityLabel(attachLabel).accessibilityIdentifier("chat-attach")
+        } else {
+            #if os(iOS)
+            Menu {
+                if CameraPicker.isAvailable { Button("Take a photo", systemImage: "camera") { taking = true } }
+                Button("Choose a photo", systemImage: "photo") { choosing = true }
+            } label: { disc }
+                .buttonStyle(.plain).accessibilityLabel("Attach a photo or a file").accessibilityIdentifier("chat-attach")
+            #else
+            Button { choosing = true } label: { disc }
+                .buttonStyle(.plain).accessibilityLabel("Attach a photo or a file").accessibilityIdentifier("chat-attach")
+            #endif
+        }
+    }
+
+    private var plusDisc: some View {
+        // The same disc the mic and the send arrow draw, so all three ends match.
+        Image(systemName: "plus").font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: Self.disc, height: Self.disc)
+            .background(tint, in: Circle())
+            .frame(width: Self.touch, height: Self.touch)
+            .contentShape(Circle())
+    }
+
     /// The bar itself: the plus, the field, and the mic or the send arrow.
     private var bar: some View {
         HStack(spacing: 10) {
             if !recording {
-                Button { if let attach { attach() } else { choosing = true } } label: {
-                    // The same disc the mic and the send arrow draw, so all three ends match.
-                    Image(systemName: "plus").font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: Self.disc, height: Self.disc)
-                        .background(tint, in: Circle())
-                        .frame(width: Self.touch, height: Self.touch)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(attach == nil ? "Attach a photo or a file" : attachLabel)
-                .accessibilityIdentifier("chat-attach")
+                plus
             }
             TextField("", text: $draft, prompt: Text(placeholder).foregroundStyle(.secondary))
                 .font(.system(size: 16))
@@ -235,6 +256,18 @@ public struct GlyphComposer: View {
         // ponytail: a path as the sentence is the smallest honest wiring. A screen that wants a
         // photo understood rather than referenced passes its own `attach` (CRM's scanner, Time's
         // camera) and never reaches this.
+        #if os(iOS)
+        // A photo taken is saved as a file and its path sent, exactly as a chosen file is.
+        .fullScreenCover(isPresented: $taking) {
+            CameraPicker { image, _ in
+                taking = false
+                guard let data = image?.jpegData(compressionQuality: 0.9) else { return }
+                let url = FileManager.default.temporaryDirectory.appendingPathComponent("photo-\(UUID().uuidString.prefix(8)).jpg")
+                guard (try? data.write(to: url)) != nil else { return }
+                Task { @MainActor in working = true; await onSend(url.path, false); working = false }
+            }.ignoresSafeArea()
+        }
+        #endif
         .fileImporter(isPresented: $choosing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result, !urls.isEmpty else { return }
             let words = urls.map(\.path).joined(separator: "\n")

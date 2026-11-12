@@ -4,7 +4,7 @@ import NativeKit
 import GlyphVault
 
 /// The Mac's Today: the same lines as the iPhone home, read straight from the vault's files
-/// (Setup.vaultPath: where Glyph Studio's config says it is, GLYPH_NATIVE_VAULT in the UI check).
+/// (Setup.vaultPath: where Glyph Bot's config says it is, GLYPH_NATIVE_VAULT in the UI check).
 @MainActor
 final class Today: ObservableObject {
     @Published var glances: [String: Glance] = [:]

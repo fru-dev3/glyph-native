@@ -11,6 +11,17 @@ Download [Glyph-Native.dmg](https://github.com/fru-dev3/glyph-native/releases/la
 and drag Glyph Native to Applications. It is signed and notarized by Apple. Needs macOS 26 on
 Apple silicon.
 
+## What is new in 0.5.0
+
+- A new window with a sidebar, groups, search and sort.
+- Every app in the family is listed. The ones you cannot download yet say Coming.
+- Uninstall an app to the Trash, and install it again whenever you like.
+- A Vault page with a first-run setup that picks and checks your vault folder.
+- Pair an iPhone by QR code. The codes expire.
+- Find your vault computer on the same network or over Tailscale.
+- Settings and About are a page of the window.
+- Light and dark.
+
 ## What it installs
 
 | App | What it is for | Its own page |

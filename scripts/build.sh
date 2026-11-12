@@ -16,8 +16,8 @@ if pmset -g batt 2>/dev/null | grep -q InternalBattery && [[ -z ${GLYPH_UI_HOST:
 fi
 cd "$(dirname "$0")/.."
 
-VERSION=0.4.0
-BUILD=9
+VERSION=0.5.0
+BUILD=10
 
 swift build -c release --product GlyphNative
 
@@ -25,6 +25,16 @@ APP="build/Glyph Native.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/GlyphNative "$APP/Contents/MacOS/GlyphNative"
+# Debug info and symbols carry the absolute path of every source file and checkout. A public
+# build must not ship them (and SwiftPM also bakes in a dependency's resource-bundle build path).
+if [[ -n ${GLYPH_NATIVE_RELEASE:-} || ! -f scripts/install-all.sh ]]; then strip -S -x "$APP/Contents/MacOS/GlyphNative" 2>/dev/null
+  python3 - "$APP/Contents/MacOS/GlyphNative" <<'PY'
+import re, sys
+p = sys.argv[1]; b = open(p, "rb").read()
+b = re.sub(rb"/Users/[ -~]*?\.bundle", lambda m: (b"/nonexistent" + b"/" * len(m.group(0)))[:len(m.group(0))], b)
+open(p, "wb").write(b)
+PY
+fi
 cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 cp assets/icons/icon-*.png assets/icons/mark-*.png "$APP/Contents/Resources/"
 cp scripts/install-release.sh "$APP/Contents/Resources/"
@@ -56,6 +66,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
   <key>LSMinimumSystemVersion</key><string>26.0</string>
   <key>NSHighResolutionCapable</key><true/>
+  <!-- The vault computer is the person's own machine on their own network or tailnet, reached over plain http. -->
+  <key>NSAppTransportSecurity</key><dict><key>NSAllowsArbitraryLoads</key><true/></dict>
+  <key>NSBonjourServices</key><array><string>_glyph-vault._tcp</string></array>
+  <key>NSLocalNetworkUsageDescription</key><string>Glyph Native looks for your vault computer on this network.</string>
 $REPO_KEY
   <key>NSHumanReadableCopyright</key><string>© 2026 fru.dev</string>
 </dict>

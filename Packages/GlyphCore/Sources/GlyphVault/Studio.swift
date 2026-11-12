@@ -1,6 +1,6 @@
 import Foundation
 
-// The vault's objects (Glyph CRM's People, Places, Orgs and Things, plus Glyph Studio's
+// The vault's objects (Glyph CRM's People, Places, Orgs and Things, plus Glyph Bot's
 // projects and domains), read from the files, so a capture is filed under the same ids the CRM
 // uses. No database: `data/entities/<kind>/<slug>/entity.md` is the truth.
 // The layout is in docs/vault-format.md, "Studio links".

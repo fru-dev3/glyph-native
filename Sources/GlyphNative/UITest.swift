@@ -6,8 +6,13 @@ import NativeKit   // Family.apps: the shelf is counted against the registry, ne
 /// Applications folder) and GLYPH_NATIVE_SCRIPT (a stand-in installer that records its arguments in
 /// $GLYPH_NATIVE_APPS/calls and "installs" a stub app): real clicks on every button, pictures of each state.
 /// scripts/ui-check.sh sets it all up. Nothing real is built or installed.
+/// What the release window shows, for the tests: the cards in order, the page, the sidebar, the title.
+struct UIState: Equatable { var ids: [String] = [], page = "", sidebar = true, title = "" }
+
 @MainActor
 enum UITest {
+    static var state = UIState()
+    static var setSort: ((ShelfSort) -> Void)?
     static let on = CommandLine.arguments.contains("--uitest")
     static var shelf: Shelf?
     static var today: Today?
@@ -24,7 +29,7 @@ enum UITest {
         if let a = CommandLine.arguments.firstIndex(of: "--appearance"), a + 1 < CommandLine.arguments.count {
             NSApp.appearance = NSAppearance(named: CommandLine.arguments[a + 1] == "dark" ? .darkAqua : .aqua)
         }
-        Task.detached { try? await Task.sleep(for: .seconds(120)); print("UI TIMED OUT"); fflush(stdout); exit(2) }
+        Task.detached { try? await Task.sleep(for: .seconds(Shelf.releaseMode ? 400 : 120)); print("UI TIMED OUT"); fflush(stdout); exit(2) }
         Task {
             await wait(1.5)
             NSApp.activate(ignoringOtherApps: true)
@@ -124,6 +129,7 @@ enum UITest {
         print("DEBUG: shelf is \(shelf != nil), today is \(today != nil), windows=\(NSApp.windows.count)")
         guard let s = shelf else { check(false, "the window opened (shelf is nil)"); return }
         window?.setContentSize(NSSize(width: 1180, height: 860))
+        if Shelf.releaseMode { await runRelease(s); return }
         if CommandLine.arguments.contains("--gone") {
             guard let today else { check(false, "Today opened"); return }
             await runGone(s, today)
@@ -186,6 +192,102 @@ enum UITest {
         check(await until { s.showSettings }, "Cmd-, opens Settings")
         check(SettingsSheet.version.contains("(") && !SettingsSheet.version.hasPrefix("?"), "Settings shows the version and build (\(SettingsSheet.version))")
         await click("settings.done")
+    }
+
+    // MARK: the release window (no source checkout): GLYPH_NATIVE_APPS and GLYPH_NATIVE_VAULT are temp folders
+
+    static func type(_ text: String) -> Bool {
+        guard let tv = window?.firstResponder as? NSTextView else { return false }
+        tv.selectAll(nil)
+        if text.isEmpty { tv.deleteBackward(nil) } else { tv.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0)) }
+        return true
+    }
+    static func page(_ p: String) async -> Bool { await until(4) { state.page == p } }
+
+    static func runRelease(_ s: Shelf) async {
+        let apps = Release.apps
+        let groupCount = { (g: String) in apps.filter { $0.group == g }.count }
+        _ = await until(10) { s.rows.count == apps.count && state.ids.count == apps.count }
+        await shot("r1-all")
+        check(state.page == "apps" && state.ids.count == apps.count, "the window opens on all \(apps.count) apps")
+
+        // Search: type, the cards filter, clearing restores.
+        await click("search")
+        check(type("jot"), "the search field takes typing")
+        check(await until { state.ids == ["jot"] }, "searching 'jot' leaves Glyph Jot (\(state.ids))")
+        await shot("r2-search")
+        _ = type("zzzz")
+        check(await until { state.ids.isEmpty }, "a query nothing matches leaves no cards")
+        _ = type("")
+        check(await until { state.ids.count == apps.count }, "clearing the search restores every card")
+
+        // Sort. The menu itself is a tracking loop a synthesized click cannot drive, so the choice is set through the hook.
+        let name = { (id: String) in apps.first { $0.id == id }?.name ?? id }
+        for sort in ShelfSort.allCases {
+            setSort?(sort); await wait(0.4)
+            check(state.ids.count == apps.count, "sort \(sort.rawValue) keeps all \(apps.count) cards")
+            switch sort {
+            case .group: check(state.ids == ["Layers", "Tools", "Your life"].flatMap { g in apps.filter { $0.group == g }.map(\.id) }, "sort Group lists Layers, Tools, Your life")
+            case .name: let n = state.ids.map(name); check(n == n.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }, "sort Name is alphabetical")
+            case .status: let first = state.ids.prefix(apps.filter(\.hasDownload).count); check(first.allSatisfy { id in apps.first { $0.id == id }?.hasDownload == true }, "sort Status puts what can be installed first")
+            }
+        }
+        setSort?(.group); await wait(0.3)
+
+        // Every sidebar filter, by its count. Nothing is installed in the temp Applications folder.
+        let down = apps.filter(\.hasDownload).count, coming = apps.filter { !$0.hasDownload && $0.site == nil }.count
+        for (id, title, n) in [("filter.all", "All apps", apps.count), ("filter.installed", "Installed", 0), ("filter.updates", "Updates", 0),
+                               ("filter.missing", "Not installed", down), ("filter.coming", "Coming", coming),
+                               ("group.layers", "Layers", groupCount("Layers")), ("group.tools", "Tools", groupCount("Tools")), ("group.life", "Your life", groupCount("Your life"))] {
+            await click(id)
+            check(await until { state.title == title && state.ids.count == n }, "\(title) shows \(n) cards (\(state.title): \(state.ids.count))")
+        }
+        await click("filter.all")
+
+        // Settings page, Check for updates, About.
+        check(await click("settings", until: { state.page == "settings" }), "the Settings button opens the Settings page")
+        await shot("r3-settings")
+        let before = s.lastChecked
+        await click("settings.check")
+        check(await until(40) { s.lastChecked != nil && s.lastChecked != before }, "Check for updates runs and records the time")
+        check(await click("settings.about", until: { state.page == "about" }), "Settings opens About")
+        let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        check(SettingsSheet.version.hasPrefix(short) && short != "?", "About shows the version (\(SettingsSheet.version))")
+        await shot("r4-about")
+        check(await click("about.back", until: { state.page == "settings" }), "About goes back to Settings")
+
+        // Sidebar collapse and expand, then the Vault page.
+        await click("filter.all")
+        check(await click("sidebar.toggle", until: { !state.sidebar }), "the sidebar collapses")
+        await shot("r5-collapsed")
+        check(await click("sidebar.toggle", until: { state.sidebar }), "the sidebar expands")
+        check(await click("nav.vault", until: { state.page == "vault" }), "the Vault page opens")
+        check(await until { frames["vault.again"] != nil }, "the Vault page shows its content")
+        await shot("r6-vault")
+        await click("filter.all")
+        check(await page("apps"), "All apps returns from Vault")
+
+        // The smallest download, Glyph Time: install, uninstall, install, with the real buttons.
+        func row() -> Shelf.Row? { s.rows.first { $0.app.id == "time" } }
+        func done() async -> Bool { await until(150) { s.running == nil && s.lastResult != nil } }
+        check(await click("install.time", until: { s.running != nil || row()?.installed != nil }), "Install on Glyph Time starts")
+        check(await done() && row()?.installed != nil, "Glyph Time is installed (\(s.lastResult == true ? "ok" : "failed: " + String(s.log.suffix(160))))")
+        await shot("r7-installed")
+        s.uiHover = "time"; await wait(0.5)
+        // The question is a modal alert: only a timer in the common run-loop modes still fires while it is up.
+        let press = Timer(timeInterval: 0.2, repeats: true) { t in
+            if let m = NSApp.modalWindow, let b = m.defaultButtonCell { b.performClick(nil); t.invalidate() }
+        }
+        RunLoop.main.add(press, forMode: .common)
+        await click("uninstall.time")
+        press.invalidate()
+        s.uiHover = nil
+        check(await until(10) { row()?.installed == nil }, "the trash button, after its question, removes Glyph Time")
+        s.lastResult = nil
+        check(await click("install.time", until: { s.running != nil || row()?.installed != nil }), "Install on Glyph Time starts again")
+        check(await done() && row()?.installed != nil, "Glyph Time is installed again")
+        await shot("r8-reinstalled")
+        if row()?.installed != nil { s.uninstall(row()!, confirm: false); _ = await until(10) { row()?.installed == nil } }   // leaves the temp folder as it was
     }
 
     static func runGone(_ shelf: Shelf, _ today: Today) async {
