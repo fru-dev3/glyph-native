@@ -11,6 +11,11 @@ Download [Glyph-Native.dmg](https://github.com/fru-dev3/glyph-native/releases/la
 and drag Glyph Native to Applications. It is signed and notarized by Apple. Needs macOS 26 on
 Apple silicon.
 
+## What is new in 0.6.1
+
+- A new About page: the family's icons with a tick on the ones installed, and one-click links to the
+  site, the release notes, the source and the license.
+
 ## What is new in 0.6.0
 
 - Glyph Bot is the new native Mac app, and Glyph Native installs it. A Mac that still has the

@@ -247,34 +247,95 @@ struct SettingsPage<Toggle: View>: View {
         }
         .buttonStyle(.plain).testFrame("about.back")
         title("About")
-        VStack(spacing: 8) {
+        // The stage: the app itself, large, on the family green.
+        HStack(spacing: 24) {
             if let img = Bundle.main.image(forResource: "icon-native") {
-                Image(nsImage: img).resizable().frame(width: 72, height: 72).clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+                Image(nsImage: img).resizable().frame(width: 104, height: 104)
+                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(.white.opacity(0.28)))
+                    .shadow(color: .black.opacity(0.28), radius: 14, y: 8)
             }
-            Text("Glyph Native").font(.system(size: 24, weight: .bold)).foregroundStyle(Token.text)
-            Text("Version \(SettingsSheet.version)").font(.system(size: 13.5)).foregroundStyle(Token.quiet)
-            Text("One install for every Glyph app.").font(.system(size: 14.5)).foregroundStyle(Token.rowText)
-            LabsLink().testFrame("about.labs")
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Glyph Native").font(.system(size: 34, weight: .bold)).tracking(-0.7).foregroundStyle(.white).lineLimit(1)
+                Text("One install for every Glyph app.").font(.system(size: 16)).foregroundStyle(.white.opacity(0.9)).lineLimit(1)
+                Text("Version \(SettingsSheet.version)").font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+                    .padding(.horizontal, 11).padding(.vertical, 5)
+                    .background(Capsule().fill(.white.opacity(0.16))).overlay(Capsule().strokeBorder(.white.opacity(0.26)))
+                    .padding(.top, 4).testFrame("about.version")
+            }
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity)
-        card {
-            link("glyph.fru.dev", "https://glyph.fru.dev", "about.site")
-            Rectangle().fill(Token.hairline).frame(height: 1).padding(.vertical, 10)
-            link("Source on GitHub", "https://github.com/fru-dev3/glyph-native", "about.source")
-            Rectangle().fill(Token.hairline).frame(height: 1).padding(.vertical, 10)
-            link("License: MIT", "https://github.com/fru-dev3/glyph-native/blob/main/LICENSE", "about.license")
-        }
-        if let c = Bundle.main.object(forInfoDictionaryKey: "NSHumanReadableCopyright") as? String {
-            Text(c).font(.system(size: 12)).foregroundStyle(Token.quiet).frame(maxWidth: .infinity)
-        }
-    }
+        .padding(28).frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(LinearGradient(colors: [tileTop, tileBottom], startPoint: .top, endPoint: .bottom)))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(tileEdge.opacity(0.5)))
 
-    private func link(_ t: String, _ url: String, _ id: String) -> some View {
-        Button { NSWorkspace.shared.open(URL(string: url)!) } label: {
-            line(t) { Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Token.quiet) }
-                .contentShape(Rectangle())
+        let here = Set(shelf.rows.filter { $0.installed != nil }.map(\.id))
+        HStack(alignment: .firstTextBaseline) {
+            heading("The family")
+            Spacer()
+            Text("\(here.count) on this Mac").font(.system(size: 12.5)).foregroundStyle(Token.quiet).testFrame("about.count")
         }
-        .buttonStyle(.plain).testFrame(id)
+        card {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top), count: pageW >= 860 ? 7 : 4), spacing: 18) {
+                ForEach(Release.apps, id: \.id) { app in
+                    VStack(spacing: 8) {
+                        Group {
+                            if let img = Bundle.main.image(forResource: "icon-\(app.id)") { Image(nsImage: img).resizable() } else { Color(NSColor.hex(0x1C6B2A)) }
+                        }
+                        .frame(width: 52, height: 52).clipShape(RoundedRectangle(cornerRadius: 12.5, style: .continuous))
+                        .overlay(alignment: .bottomTrailing) {
+                            if here.contains(app.id) {
+                                Image(systemName: "checkmark.circle.fill").font(.system(size: 16)).foregroundStyle(.white, tileTop)
+                                    .background(Circle().fill(Token.raised).padding(-1.5)).offset(x: 5, y: 5)
+                            }
+                        }
+                        Text(app.name).font(.system(size: 12.5, weight: .medium)).foregroundStyle(Token.rowText).lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity).help(app.job)
+                }
+            }
+            .padding(.vertical, 6)
+        }
+
+        let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .top), count: pageW >= 860 ? 4 : 2), spacing: 14) {
+            AboutTile(symbol: "globe", name: "Website", detail: "glyph.fru.dev", url: "https://glyph.fru.dev").testFrame("about.site")
+            AboutTile(symbol: "sparkles", name: "What's new", detail: "Version \(short)", url: "https://github.com/fru-dev3/glyph-native/releases/tag/v\(short)").testFrame("about.news")
+            AboutTile(symbol: "chevron.left.forwardslash.chevron.right", name: "Source", detail: "On GitHub", url: "https://github.com/fru-dev3/glyph-native").testFrame("about.source")
+            AboutTile(symbol: "doc.text", name: "License", detail: "MIT", url: "https://github.com/fru-dev3/glyph-native/blob/main/LICENSE").testFrame("about.license")
+        }
+
+        HStack(spacing: 14) {
+            LabsLink().testFrame("about.labs")
+            if let c = Bundle.main.object(forInfoDictionaryKey: "NSHumanReadableCopyright") as? String {
+                Text(c).font(.system(size: 12)).foregroundStyle(Token.quiet)
+            }
+        }
+        .frame(maxWidth: .infinity).padding(.top, 4)
+    }
+}
+
+/// One way out of About: a symbol, what it is, where it goes. Lifts and turns green under the pointer.
+private struct AboutTile: View {
+    let symbol: String, name: String, detail: String, url: String
+    @State private var hover = false
+    var body: some View {
+        Button { if let u = URL(string: url) { NSWorkspace.shared.open(u) } } label: {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .top) {
+                    Image(systemName: symbol).font(.system(size: 18, weight: .medium)).foregroundStyle(Token.accentLight).frame(height: 24)
+                    Spacer()
+                    Image(systemName: "arrow.up.right").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(hover ? Token.accentLight : Token.faint)
+                }
+                Text(name).font(.system(size: 15, weight: .semibold)).foregroundStyle(Token.text).lineLimit(1).padding(.top, 14)
+                Text(detail).font(.system(size: 12.5)).foregroundStyle(Token.quiet).lineLimit(1).padding(.top, 2)
+            }
+            .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(hover ? Token.raisedLifted : Token.raised))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(hover ? Token.tintBorder : Token.border))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain).onHover { hover = $0 }
     }
 }
 
