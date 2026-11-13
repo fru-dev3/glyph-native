@@ -104,7 +104,7 @@ struct VaultPage<Toggle: View>: View {
     let sidebarShown: Bool
     @ViewBuilder let toggle: () -> Toggle
     @State private var wide = false
-    @State private var answeredAt: Date?
+    @State private var checkedAt: Date?
 
     var body: some View {
         ScrollView {
@@ -117,8 +117,7 @@ struct VaultPage<Toggle: View>: View {
                 }
                 if model.path != nil { strip }
                 heading("Folder")
-                if wide { HStack(alignment: .top, spacing: 14) { folderCard; if hasAddress { computerCard } } }
-                else { VStack(alignment: .leading, spacing: 14) { folderCard; if hasAddress { computerCard } } }
+                VStack(alignment: .leading, spacing: 14) { folderCard; if hasAddress { computerCard } }   // one column, full width, at every size
                 heading("Devices")
                 devicesCard
                 Button("Set up again") { SetupFlow.shared.restart() }.buttonStyle(.plain).font(.system(size: 12.5)).foregroundStyle(Token.quiet)
@@ -139,18 +138,18 @@ struct VaultPage<Toggle: View>: View {
 
     private func card<C: View>(@ViewBuilder _ c: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 0) { c() }
-            .padding(16).frame(maxWidth: .infinity, maxHeight: wide ? .infinity : nil, alignment: .leading)
+            .padding(16).frame(maxWidth: .infinity, maxHeight: nil, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Token.raised))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Token.border))
     }
 
     private var address: String { setup.env["GLYPH_VAULT_URL"] ?? "" }
     private var hasAddress: Bool { model.path != nil && !address.isEmpty }
-    private var answering: Bool { setup.health?.ok == true }
+    private var connected: Bool { setup.health?.ok == true }
 
     private func check() async {
         await setup.load()
-        if answering { answeredAt = .now }
+        if connected { checkedAt = .now }
     }
 
     /// "http://studio.example:7071" gives "Studio"; an IP address or nothing gives "Vault computer".
@@ -201,14 +200,14 @@ struct VaultPage<Toggle: View>: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 8) {
                         Text(computerName).font(.system(size: 15, weight: .semibold)).foregroundStyle(Token.text)
-                            .lineLimit(1).truncationMode(.tail).layoutPriority(0)
+                            .lineLimit(1).truncationMode(.middle).layoutPriority(0)
                         HStack(spacing: 5) {
-                            if answering { Circle().fill(Token.accentLight).frame(width: 6, height: 6) }
-                            Text(answering ? "Answering" : "Not answering").font(.system(size: 11.5, weight: .semibold))
-                                .foregroundStyle(answering ? Token.accentLight : amber).lineLimit(1)
+                            if connected { Circle().fill(Token.accentLight).frame(width: 6, height: 6) }
+                            Text(connected ? "Connected" : "Not reachable").font(.system(size: 11.5, weight: .semibold))
+                                .foregroundStyle(connected ? Token.accentLight : amber).lineLimit(1)
                         }
                         .padding(.horizontal, 9).frame(height: 22).fixedSize().layoutPriority(1)
-                        .background(Capsule().fill(answering ? Token.tint : Color(red: 0.165, green: 0.133, blue: 0.078)))
+                        .background(Capsule().fill(connected ? Token.tint : Color(red: 0.165, green: 0.133, blue: 0.078)))
                         .testFrame("vault.computer")
                     }
                     HStack(spacing: 6) {
@@ -221,9 +220,9 @@ struct VaultPage<Toggle: View>: View {
                     }
                 }
                 Spacer(minLength: 8)
-                if answering {
-                    if let t = answeredAt {
-                        Text("Answered at \(t.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits)))")
+                if connected {
+                    if let t = checkedAt {
+                        Text("Checked \(t.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits)))")
                             .font(.system(size: 12.5)).foregroundStyle(Token.quiet).lineLimit(1).fixedSize()
                     }
                 } else {

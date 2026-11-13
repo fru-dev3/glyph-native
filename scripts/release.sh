@@ -12,6 +12,9 @@ identity=$(security find-identity -v -p codesigning | awk -F'"' '/Developer ID A
 [[ -n $identity ]] || { echo "no Developer ID Application certificate in the keychain"; exit 1; }
 version=$(awk -F= '/^VERSION=/{print $2; exit}' scripts/build.sh)
 repo=fru-dev3/glyph-native
+# The shared personal-data scan: scripts/public-scan.sh in a mirror, the repo's own beside this folder.
+scan=./scripts/public-scan.sh; [[ -x $scan ]] || scan=../scripts/public-scan.sh
+[[ -x $scan ]] || { echo "no public-scan.sh"; exit 1; }
 
 echo "building Glyph Native $version"
 SIGN_IDENTITY="$identity" GLYPH_NATIVE_RELEASE=1 ./scripts/build.sh
@@ -19,6 +22,7 @@ app="build/Glyph Native.app"
 codesign --verify --strict --deep "$app"
 sig=$(codesign -dvv "$app" 2>&1)
 [[ $sig == *"(runtime)"* ]] || { echo "not signed with the hardened runtime"; exit 1; }
+"$scan" "$app" || { echo "personal detail in the app: nothing was uploaded"; exit 1; }
 
 echo "making the disk image"
 rm -rf dist && mkdir -p dist/stage
@@ -44,6 +48,7 @@ xattr -w com.apple.quarantine "0081;00000000;Safari;" dist/check.dmg
 spctl --assess --type open --context context:primary-signature -v dist/check.dmg
 rm dist/check.dmg
 cp "$dmg" dist/Glyph-Native.dmg
+"$scan" dist/Glyph-Native.dmg || { echo "personal detail in the final disk image: nothing was uploaded"; exit 1; }
 
 notes="Glyph Native $version: one install for every Glyph app. Signed and notarized; needs macOS 26 on Apple silicon."
 if gh release view "v$version" --repo $repo >/dev/null 2>&1; then

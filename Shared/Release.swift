@@ -12,6 +12,8 @@ public struct ReleasedApp: Identifiable, Hashable, Sendable {
     public let repo: String?       // GitHub "owner/name"; nil when there is no public download
     public let asset: String?      // the disk image's file name on the release
     public let macBundle: String?
+    /// An earlier app's bundle id that this one replaces: never offered, never touched, only noticed.
+    public let retiredBundle: String?
     public let group: String       // "Layers", "Tools" or "Your life": the window's sections
     public let site: String?       // a web entry (no app to install): its address
     /// The app's page on the website; apps without a page of their own point at the home page.
@@ -22,8 +24,8 @@ public struct ReleasedApp: Identifiable, Hashable, Sendable {
     public var hasDownload: Bool { repo != nil && asset != nil }
     public var downloadURL: URL? { hasDownload ? URL(string: "https://github.com/\(repo!)/releases/latest/download/\(asset!)") : nil }
     public var latestURL: URL? { repo.flatMap { URL(string: "https://github.com/\($0)/releases/latest") } }
-    public init(id: String, name: String, job: String, repo: String? = nil, asset: String? = nil, macBundle: String? = nil, group: String, site: String? = nil) {
-        self.id = id; self.name = name; self.job = job; self.repo = repo; self.asset = asset; self.macBundle = macBundle; self.group = group; self.site = site
+    public init(id: String, name: String, job: String, repo: String? = nil, asset: String? = nil, macBundle: String? = nil, retiredBundle: String? = nil, group: String, site: String? = nil) {
+        self.id = id; self.name = name; self.job = job; self.repo = repo; self.asset = asset; self.macBundle = macBundle; self.retiredBundle = retiredBundle; self.group = group; self.site = site
     }
     /// The same app as a FamilyApp, so the one AppCard draws both modes.
     public var family: FamilyApp {
@@ -34,7 +36,7 @@ public struct ReleasedApp: Identifiable, Hashable, Sendable {
 public enum Release {
     public static let apps: [ReleasedApp] = [
         ReleasedApp(id: "studio", name: "Glyph Bot", job: "One harness for all your agents",
-                    repo: "fru-dev3/glyph-studio", asset: "Glyph-Studio-mac-arm64.dmg", macBundle: "sh.prevail.desktop", group: "Layers"),
+                    repo: "fru-dev3/glyph-studio", asset: "Glyph-Bot.dmg", macBundle: "dev.fru.studio", retiredBundle: "sh.prevail.desktop", group: "Layers"),
         ReleasedApp(id: "jot", name: "Glyph Jot", job: "Personal context",
                     repo: "fru-dev3/glyph-jot", asset: "Glyph-Jot.dmg", macBundle: "dev.fru.jot.mac", group: "Layers"),
         ReleasedApp(id: "ibis", name: "Glyph Ibis", job: "What the world knows", group: "Layers", site: "https://glyph.fru.dev/ibis"),
@@ -94,6 +96,11 @@ public enum Release {
             if let v = (plist?[k] as? String)?.trimmingCharacters(in: .whitespaces), !v.isEmpty { return v }
         }
         return ""
+    }
+
+    /// The second line on a card whose new app is not installed while the retired one is.
+    public static func retiredLine(retiredInstalled: Bool, installed: Bool, name: String) -> String? {
+        retiredInstalled && !installed ? "The earlier \(name) is installed and retired." : nil
     }
 
     /// "Installed · 0.1.1", or just "Installed" when the version is not known.

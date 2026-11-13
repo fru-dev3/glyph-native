@@ -16,8 +16,8 @@ if pmset -g batt 2>/dev/null | grep -q InternalBattery && [[ -z ${GLYPH_UI_HOST:
 fi
 cd "$(dirname "$0")/.."
 
-VERSION=0.5.0
-BUILD=10
+VERSION=0.6.0
+BUILD=11
 
 swift build -c release --product GlyphNative
 

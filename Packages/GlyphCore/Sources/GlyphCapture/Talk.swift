@@ -152,10 +152,12 @@ public extension View {
 }
 
 /// How tall the pinned composer is, for the scroll margin: the 44pt row with 4 above and below, 10
-/// on top and 6 under. Still 52, as it was when the discs were 34 in 9 of padding: the discs are
-/// tapped at 44 now and the padding came down by the same 5 each side, on purpose, so no page's
-/// scroll margin moved. It replaced the trio, which replaced the 196pt disc-and-caption.
-let composerHeight: CGFloat = (GlyphComposer.air - 3) + 52 + 6
+/// on top and 6 under. It was 52 while the field was one fixed line; a vertical field (which is
+/// what lets a long sentence be read back and copied) is a few points taller, and the margin has
+/// to be the bar's real height or the last row of a page parks under it for good. Measured in the
+/// Simulator by Well's capture test, which scrolls to the end and compares the two frames: at 52
+/// the last row ended 5pt inside the bar.
+let composerHeight: CGFloat = (GlyphComposer.air - 3) + 60 + 6
 
 struct TalkButtonPlacement: ViewModifier {
     let tint: Color, placeholder: String, page: Color, attach: (() -> Void)?, onFinal: @MainActor (String) async -> Void

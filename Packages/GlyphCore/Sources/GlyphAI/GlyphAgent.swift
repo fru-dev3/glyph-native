@@ -121,12 +121,12 @@ public struct Hub: Sendable {
 
     /// Status and body, or nil when the hub can't be reached.
     public func send(_ method: String, _ path: String, query: [String: String] = [:], body: Data? = nil, type: String = "application/json",
-                     headers: [String: String] = [:]) async -> (Int, Data)? {
+                     headers: [String: String] = [:], timeout: TimeInterval = 20) async -> (Int, Data)? {
         if let vault { return MacHub(vault: vault).handle(method, path, query: query, body: body, headers: headers) }
         guard let base, var c = URLComponents(url: base.appending(path: path), resolvingAgainstBaseURL: false) else { return nil }
         if !query.isEmpty { c.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) } }
         guard let url = c.url else { return nil }
-        var r = URLRequest(url: url, timeoutInterval: 20)
+        var r = URLRequest(url: url, timeoutInterval: timeout)
         r.httpMethod = method; r.httpBody = body; r.cachePolicy = .reloadIgnoringLocalCacheData
         if body != nil { r.setValue(type, forHTTPHeaderField: "Content-Type") }
         for (k, v) in headers { r.setValue(v, forHTTPHeaderField: k) }

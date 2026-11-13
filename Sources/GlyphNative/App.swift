@@ -115,6 +115,7 @@ final class Shelf: ObservableObject {
         var path: URL?
         var release = false         // public build: `here` is the newest GitHub release, not a repo's main
         var looked = false          // release mode: GitHub has been asked
+        var retiredHere = false     // release mode: the earlier app this one replaces is installed (never touched)
         var id: String { app.id }
         var canInstall: Bool { release ? here != nil && hasDownload : app.folder != nil && here != nil && !app.ownInstall }
         var released: ReleasedApp? { release ? Release.apps.first { $0.id == app.id } : nil }
@@ -159,6 +160,9 @@ final class Shelf: ObservableObject {
             r.release = Self.releaseMode
             r.looked = looked
             if Self.releaseMode { r.here = latest[a.id] }
+            if Self.releaseMode, r.app.macBundle != nil, let old = Release.apps.first(where: { $0.id == a.id })?.retiredBundle {
+                r.retiredHere = installedURL(old) != nil
+            }
             if let b = a.macBundle, let url = installedURL(b) {
                 r.path = url
                 r.installed = Release.installedVersion(Self.info(url))

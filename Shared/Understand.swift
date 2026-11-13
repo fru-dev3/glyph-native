@@ -125,10 +125,15 @@ public enum Understand {
     /// One turn. Told not to do anything: nothing, always. Otherwise Claude through the hub, with Omega's
     /// preferences for the driver; nil when the hub or Claude can't be reached (the words are kept to send again).
     public static func plan(_ said: String, history: [ChatTurn] = [], hub: Hub) async -> Turn? {
-        if Router.declined(said) { return .none(nothing) }
+        await planned(said, history: history, hub: hub)?.turn
+    }
+
+    /// `plan`, with who wrote the answer ("claude", "council(claude,codex)"; empty when the hub does not say).
+    public static func planned(_ said: String, history: [ChatTurn] = [], hub: Hub) async -> (turn: Turn, by: String)? {
+        if Router.declined(said) { return (.none(nothing), "") }
         guard let base = hub.base else { return nil }
         let prefs = await HubPreferences.shared.text("native", hub: base)
-        return await hub.understand(surface: "native", text: said, history: history, preferences: prefs).map(turn)
+        return await hub.understand(surface: "native", text: said, history: history, preferences: prefs).map { (turn($0), $0.answeredBy) }
     }
 
     /// UI tests (-rulesOnly) only: the keyword rules stand in for Claude, so runs are the same everywhere.

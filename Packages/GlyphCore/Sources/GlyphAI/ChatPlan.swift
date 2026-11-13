@@ -47,9 +47,11 @@ public struct ChatPlan: Decodable, Equatable, Sendable {
     public var jobs: [Job]
     /// `act` only, optional: one proactive offer once the jobs are done ("Want me to log the walk in Well when you're back?").
     public var suggest: String
+    /// Who wrote the answer, as the hub says it ("claude", "council(claude,codex)"); empty from an older hub.
+    public var answeredBy: String
 
-    public init(kind: String, reply: String = "", question: String = "", jobs: [Job] = [], suggest: String = "") {
-        self.kind = kind; self.reply = reply; self.question = question; self.jobs = jobs; self.suggest = suggest
+    public init(kind: String, reply: String = "", question: String = "", jobs: [Job] = [], suggest: String = "", answeredBy: String = "") {
+        self.kind = kind; self.reply = reply; self.question = question; self.jobs = jobs; self.suggest = suggest; self.answeredBy = answeredBy
     }
     public init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
@@ -58,8 +60,9 @@ public struct ChatPlan: Decodable, Equatable, Sendable {
         question = try c.decodeIfPresent(String.self, forKey: .question) ?? ""
         jobs = try c.decodeIfPresent([Job].self, forKey: .jobs) ?? []
         suggest = try c.decodeIfPresent(String.self, forKey: .suggest) ?? ""
+        answeredBy = try c.decodeIfPresent(String.self, forKey: .answeredBy) ?? ""
     }
-    enum CodingKeys: String, CodingKey { case kind, reply, question, jobs, suggest }
+    enum CodingKeys: String, CodingKey { case kind, reply, question, jobs, suggest; case answeredBy = "answered_by" }
 
     /// Time's armed answer as the confirmed card: "Alarm set · 3:32 PM · Take a walk". The time is Time's own
     /// (from its answer, "Alarm: Take a walk, today at 3:32 PM"), the hub's `at` only when Time's has none.
@@ -119,7 +122,11 @@ extension Hub {
         if preferences == nil { prefs = await preferenceText(for: surface) }
         if !prefs.isEmpty { body["preferences"] = prefs }
         if let period { body["period"] = period }
-        guard let (code, data) = await send("POST", "understand", body: json(body)), code == 200 else { return nil }
+        // A council takes minutes where one engine takes seconds: wait as long as this app's choice needs (the last
+        // settings this phone read), and look at the settings again in the background when they are old.
+        let wait = AnswerSettings.timeout(for: AnswerSettings.cached?.choice(for: surface) ?? ["auto"])
+        if AnswerSettings.stale { Task { _ = await fetchAnswers() } }
+        guard let (code, data) = await send("POST", "understand", body: json(body), timeout: wait), code == 200 else { return nil }
         return try? JSONDecoder().decode(ChatPlan.self, from: data)
     }
 

@@ -186,7 +186,7 @@ final class SetupFlow: ObservableObject {
         let a = code.trimmingCharacters(in: .whitespaces); codeNote = nil
         Task {
             if await Self.ask(a, port: Onboarding.port(of: a.contains(":") ? a : Self.storedAddress)) { connect(name: a, address: a) }
-            else { codeNote = "Nothing answered at that address." }
+            else { codeNote = "Nothing reachable at that address." }
         }
     }
 }
@@ -379,7 +379,7 @@ struct SetupView: View {
     private var proof: String {
         let f = DateFormatter(); f.dateFormat = "HH:mm"
         guard let at = flow.proofAt else { return "" }   // no proof ran, no sentence
-        return flow.remoteName != nil ? "It answered at \(f.string(from: at))." : "We saved a test note here and read it back at \(f.string(from: at))."
+        return flow.remoteName != nil ? "Connected at \(f.string(from: at))." : "We saved a test note here and read it back at \(f.string(from: at))."
     }
 
     private func title(_ s: String) -> some View { Text(s).font(.system(size: 44, weight: .bold)).tracking(-1.3).lineLimit(1).minimumScaleFactor(38.0 / 44.0).frame(maxWidth: .infinity, alignment: .leading) }

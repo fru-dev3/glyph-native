@@ -18,7 +18,7 @@ struct ReleaseShelfView: View {
     @State private var gridWidth: CGFloat = 1000
     @StateObject private var vault = VaultModel.shared
     @State private var showVault = PictureArgs.value("--page") == "vault" || SetupFlow.shared.finishedOnce
-    @State private var sub: ShelfSubPage? = PictureArgs.value("--page") == "settings" ? .settings : PictureArgs.value("--page") == "about" ? .about : nil
+    @State private var sub: ShelfSubPage? = PictureArgs.value("--page") == "settings" ? .settings : PictureArgs.value("--page") == "about" ? .about : PictureArgs.value("--page") == "answers" ? .answers : nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var scrollY: CGFloat = 0
     @State private var scrollPos = ScrollPosition()
@@ -74,7 +74,7 @@ struct ReleaseShelfView: View {
     }
 
     private var uiState: UIState {
-        UIState(ids: sections.flatMap { $0.items.map(\.id) }, page: sub == .settings ? "settings" : sub == .about ? "about" : showVault ? "vault" : "apps",
+        UIState(ids: sections.flatMap { $0.items.map(\.id) }, page: sub == .settings ? "settings" : sub == .about ? "about" : sub == .answers ? "answers" : showVault ? "vault" : "apps",
                 sidebar: sidebarShown, title: title)
     }
 
@@ -441,7 +441,12 @@ struct ReleaseCard: View {
             }
             Spacer(minLength: 8)
             HStack(spacing: 8) {
-                Text(status).font(.system(size: 12.5).monospacedDigit()).foregroundStyle(lit ? Color.white : (row.needsUpdate ? Token.tintText : Token.quiet)).lineLimit(1)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(status).font(.system(size: 12.5).monospacedDigit()).foregroundStyle(lit ? Color.white : (row.needsUpdate ? Token.tintText : Token.quiet)).lineLimit(1)
+                    if let old = Release.retiredLine(retiredInstalled: row.retiredHere, installed: row.installed != nil, name: row.app.name) {
+                        Text(old).font(.system(size: 11)).foregroundStyle(lit ? Color.white.opacity(0.85) : Token.quiet).lineLimit(1).minimumScaleFactor(0.85)
+                    }
+                }
                 Spacer(minLength: 4)
                 action
             }

@@ -11,7 +11,16 @@ Download [Glyph-Native.dmg](https://github.com/fru-dev3/glyph-native/releases/la
 and drag Glyph Native to Applications. It is signed and notarized by Apple. Needs macOS 26 on
 Apple silicon.
 
-## What is new in 0.5.0
+## What is new in 0.6.0
+
+- Glyph Bot is the new native Mac app, and Glyph Native installs it. A Mac that still has the
+  earlier Glyph Bot sees a plain Install and a note that the earlier one is retired. It is never touched.
+- Choose which engine answers your chats, on the "Answers come from" settings page.
+- Pairing codes expire, so an old code cannot be reused.
+- Find your vault computer on your network.
+- The Vault page is one column and reads Connected, Checked or Not reachable.
+
+## Earlier: 0.5.0
 
 - A new window with a sidebar, groups, search and sort.
 - Every app in the family is listed. The ones you cannot download yet say Coming.
@@ -26,7 +35,7 @@ Apple silicon.
 
 | App | What it is for | Its own page |
 |---|---|---|
-| Glyph Studio | One harness for all your agents | [glyph.fru.dev/studio](https://glyph.fru.dev/studio) |
+| Glyph Bot | One harness for all your agents | [glyph.fru.dev/bot](https://glyph.fru.dev/bot) |
 | Glyph Jot | Personal context: notes, dictation and meetings | [glyph.fru.dev/jot](https://glyph.fru.dev/jot) |
 | Glyph Arena | The best AI model and recipe for each task | [glyph.fru.dev/arena](https://glyph.fru.dev/arena) |
 | Glyph Cast | Screen videos, cleaned up | [glyph.fru.dev/cast](https://glyph.fru.dev/cast) |

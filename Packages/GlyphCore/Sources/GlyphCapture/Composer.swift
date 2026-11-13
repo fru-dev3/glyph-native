@@ -189,8 +189,18 @@ public struct GlyphComposer: View {
             if !recording {
                 plus
             }
-            TextField("", text: $draft, prompt: Text(placeholder).foregroundStyle(.secondary))
+            // The field grows with what is in it, to five lines, then scrolls (Fru, 2026-11-12:
+            // "that input box could expand to show me all the content I'm typing, not just stay
+            // static in one location"). A vertical field is also a multi-line one, so a long
+            // sentence can be read back, selected and copied before it is sent, which a
+            // single-line field scrolled sideways past the end of.
+            //
+            // `submitLabel(.send)` and `onSubmit` still send: on a vertical field the Return key
+            // becomes the send key rather than a newline, which is what every other Glyph
+            // composer does and what the send arrow beside it does.
+            TextField("", text: $draft, prompt: Text(placeholder).foregroundStyle(.secondary), axis: .vertical)
                 .font(.system(size: 16))
+                .lineLimit(1...5)
                 .textFieldStyle(.plain)
                 .focused($field).submitLabel(.send)
                 .onSubmit { send() }
