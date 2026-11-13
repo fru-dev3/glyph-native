@@ -11,6 +11,10 @@ Download [Glyph-Native.dmg](https://github.com/fru-dev3/glyph-native/releases/la
 and drag Glyph Native to Applications. It is signed and notarized by Apple. Needs macOS 26 on
 Apple silicon.
 
+## What is new in 0.6.2
+
+- A collapsed sidebar keeps its icons: every filter, group, the Vault and Settings stay one click away.
+
 ## What is new in 0.6.1
 
 - A new About page: the family's icons with a tick on the ones installed, and one-click links to the

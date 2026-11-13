@@ -307,7 +307,7 @@ struct VaultPage<Toggle: View>: View {
                             .overlay(Image(systemName: glyph(d)).font(.system(size: 20)).foregroundStyle(col))
                             .frame(width: 44, height: 44)
                         Text(d.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white).lineLimit(1).truncationMode(.middle)
-                        Text(VaultKit.ago(d.seen, now: model.now)).font(.system(size: 12)).foregroundStyle(stale(d) ? amber : Token.quiet).lineLimit(1).truncationMode(.middle)
+                        Text(VaultKit.ago(d.seen, now: model.now)).font(.system(size: 12)).foregroundStyle(stale(d) ? amber : Color.white.opacity(0.6)).lineLimit(1).truncationMode(.middle)
                     }.frame(width: 160, height: 44 + 3 + 16 + 3 + 15, alignment: .top)
                         .position(x: pos.x, y: pos.y + (44 + 3 + 16 + 3 + 15) / 2 - 22)
                 }

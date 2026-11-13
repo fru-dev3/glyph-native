@@ -57,10 +57,8 @@ struct ReleaseShelfView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            if sidebarShown {
-                sidebar
-                Rectangle().fill(Token.hairline).frame(width: 1)
-            }
+            if sidebarShown { sidebar } else { rail }
+            Rectangle().fill(Token.hairline).frame(width: 1)
             main
         }
         .clipped()
@@ -134,6 +132,58 @@ struct ReleaseShelfView: View {
         .transition(.move(edge: .leading))
     }
 
+    /// The collapsed sidebar: the same places as icons only (Fru: "it should still show the icons"), each with its
+    /// name on hover. The ids match the full rows, since only one of the two is ever on screen.
+    private var rail: some View {
+        let updates = shelf.rows.filter(\.needsUpdate).count
+        return VStack(spacing: 14) {
+            if let img = Bundle.main.image(forResource: "icon-native") {
+                Image(nsImage: img).resizable().frame(width: 30, height: 30).clipShape(RoundedRectangle(cornerRadius: 7.2, style: .continuous))
+                    .padding(.top, 40)   // below the window's own traffic lights
+            }
+            sidebarToggle
+            railIcon("magnifyingglass", false, "Search apps", "rail.search") { setSidebar(true); DispatchQueue.main.async { searchFocused = true } }
+                .keyboardShortcut("k", modifiers: .command)
+            VStack(spacing: 2) {
+                railFilter("All apps", "square.grid.2x2", .all, "filter.all")
+                railFilter("Installed", "arrow.down.to.line", .installed, "filter.installed")
+                railFilter("Updates", "arrow.triangle.2.circlepath", .updates, "filter.updates")
+                    .overlay(alignment: .topTrailing) { if updates > 0 { Circle().fill(Token.accentLight).frame(width: 7, height: 7).padding(6) } }
+                railFilter("Not installed", "circle.dashed", .missing, "filter.missing")
+                railFilter("Coming", "clock", .coming, "filter.coming")
+            }
+            Rectangle().fill(Token.hairline).frame(width: 24, height: 1)
+            VStack(spacing: 2) {
+                railFilter("Layers", "square.3.layers.3d", .group("Layers"), "group.layers")
+                railFilter("Tools", "wrench.fill", .group("Tools"), "group.tools")
+                railFilter("Your life", "person.crop.circle", .group("Your life"), "group.life")
+            }
+            Rectangle().fill(Token.hairline).frame(width: 24, height: 1)
+            railIcon("folder", showVault && sub == nil, "Vault", "nav.vault") { showVault = true; sub = nil }
+            Spacer(minLength: 0)
+            railIcon("gearshape", sub != nil, "Settings", "settings") { openSettings() }
+        }
+        .padding(.bottom, 14)
+        .frame(width: 68)
+        .background(Token.sidebar.ignoresSafeArea())
+        .transition(.move(edge: .leading))
+    }
+
+    private func railFilter(_ label: String, _ icon: String, _ f: ShelfFilter, _ test: String) -> some View {
+        railIcon(icon, filter == f && !showVault && sub == nil, label, test) { filter = f; showVault = false; sub = nil }
+    }
+
+    private func railIcon(_ icon: String, _ on: Bool, _ label: String, _ test: String, _ act: @escaping () -> Void) -> some View {
+        Button(action: act) {
+            Image(systemName: icon).font(.system(size: 15, weight: on ? .semibold : .regular)).foregroundStyle(on ? Token.tintText : Token.quiet)
+                .frame(width: 44, height: 34)
+                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(on ? Token.tint : .clear))
+                .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(on ? Token.tintBorder : .clear))
+                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+        .buttonStyle(.plain).help(label).accessibilityLabel(label).testFrame(test)
+    }
+
     private var sidebarToggle: some View {
         Button { setSidebar(!sidebarShown) } label: {
             Image(systemName: "sidebar.left").font(.system(size: 15)).foregroundStyle(Token.quiet).frame(width: 36, height: 36).contentShape(Rectangle())
@@ -197,16 +247,12 @@ struct ReleaseShelfView: View {
     // MARK: main
 
     @ViewBuilder private var main: some View {
-        if sub != nil { SettingsPage(sidebarShown: sidebarShown, sub: $sub, toggle: { sidebarToggle }) }
-        else if showVault { VaultPage(model: vault, sidebarShown: sidebarShown, toggle: { sidebarToggle }) } else { appsMain }
+        if sub != nil { SettingsPage(sidebarShown: true, sub: $sub, toggle: { sidebarToggle }) }
+        else if showVault { VaultPage(model: vault, sidebarShown: true, toggle: { sidebarToggle }) } else { appsMain }
     }
 
     private var titleRow: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            if !sidebarShown {
-                // About 76pt from the window edge, clear of the traffic lights.
-                sidebarToggle.padding(.leading, 48).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 4 }
-            }
             Text(title).font(.system(size: 30, weight: .bold)).tracking(-0.6).foregroundStyle(Token.text)
             Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day())).font(.system(size: 13)).foregroundStyle(Token.quiet)
             Spacer(minLength: 8)
