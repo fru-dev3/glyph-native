@@ -37,7 +37,7 @@ final class SetupFlow: ObservableObject {
 
     init() {
         let want = PictureArgs.value("--setup")
-        active = Shelf.releaseMode && (PictureArgs.on ? want != nil : Setup.vaultPath == nil)
+        active = PictureArgs.on ? want != nil : Setup.vaultPath == nil
         if let want, let s = Step(rawValue: want) { step = s }
         // A picture of M4 has no accepted folder; GLYPH_NATIVE_VAULT (a temp folder) stands in for it.
         if PictureArgs.value("--setup") == "ready" { proofAt = .now; if let v = ProcessInfo.processInfo.environment["GLYPH_NATIVE_VAULT"] { model.path = v } }
@@ -196,8 +196,7 @@ final class SetupFlow: ObservableObject {
 struct RootView: View {
     @ObservedObject private var flow = SetupFlow.shared
     var body: some View {
-        if !Shelf.releaseMode { ShelfView() }
-        else if flow.active { SetupView(flow: flow) }
+        if flow.active { SetupView(flow: flow) }
         else { ReleaseShelfView() }
     }
 }

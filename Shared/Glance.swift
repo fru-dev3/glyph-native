@@ -21,6 +21,18 @@ public struct Running: Equatable, Sendable {
 public enum Glances {
     // MARK: Time (GET /time, or data/apps/time/sessions/*.jsonl)
 
+    /// Seven days of hours, oldest first, ending today: the same sessions the glance is read from,
+    /// totalled a day at a time. Nothing is asked of the hub that it was not already sending.
+    public static func week(_ data: Data, now: Date = .now, calendar: Calendar = .current) -> [TimeInterval] {
+        let sessions = TimeLog.sessions(TimeLog.events(in: data))
+        let today = calendar.startOfDay(for: now)
+        return (0..<7).reversed().map { back in
+            guard let from = calendar.date(byAdding: .day, value: -back, to: today) else { return 0 }
+            let to = calendar.date(byAdding: .day, value: 1, to: from) ?? now
+            return TimeLog.totals(sessions, from: from, to: min(to, now), now: now).reduce(0) { $0 + $1.seconds }
+        }
+    }
+
     public static func time(_ data: Data, now: Date = .now, calendar: Calendar = .current) -> (glance: Glance?, running: Running?) {
         let sessions = TimeLog.sessions(TimeLog.events(in: data))
         let day = calendar.startOfDay(for: now)

@@ -1,8 +1,8 @@
 import Foundation
 @_exported import GlyphCapture
 
-/// The Glyph Native family: every app, how to open it on the iPhone (its URL scheme) and where it
-/// lives in this repo. One list for the iPhone launcher and the Mac installer.
+/// The Glyph Native family: every app and how to open it on the iPhone (its URL scheme). The list
+/// the iPhone launcher shows.
 public struct FamilyApp: Identifiable, Hashable, Sendable {
     public let id: String          // also the icon's asset name ("icon-<id>")
     public let name: String
@@ -10,37 +10,39 @@ public struct FamilyApp: Identifiable, Hashable, Sendable {
     public let scheme: String      // opens the iPhone app: "<scheme>://"
     public let iosBundle: String?
     public let macBundle: String?
-    public let folder: String?     // its folder in the family's repo (scripts/build.sh, scripts/install-iphone.sh)
-    public let ownInstall: Bool    // installed only by its own script, never by Install All (Glyph Jot)
+    /// This app has a build on TestFlight, so the iPhone can install it by itself. An app with no
+    /// record in App Store Connect has nowhere to install it from but a Mac, and says so.
+    /// Checked 2026-11-13: only Glyph Jot ("Glyph by fru.dev") has one, with five valid builds.
+    public let onTestFlight: Bool
     public var url: URL { URL(string: "\(scheme)://")! }
 }
 
 public enum Family {
     public static let apps: [FamilyApp] = [
         FamilyApp(id: "jot", name: "Glyph Jot", job: "Personal context", scheme: "jot",
-                  iosBundle: "dev.fru.jot", macBundle: "dev.fru.jot.mac", folder: nil, ownInstall: true),
+                  iosBundle: "dev.fru.jot", macBundle: "dev.fru.jot.mac", onTestFlight: true),
         FamilyApp(id: "time", name: "Glyph Time", job: "Where your hours go", scheme: "glyph-time",
-                  iosBundle: "dev.fru.time.ios", macBundle: "dev.fru.time", folder: "Time", ownInstall: false),
+                  iosBundle: "dev.fru.time.ios", macBundle: "dev.fru.time", onTestFlight: false),
         FamilyApp(id: "well", name: "Glyph Well", job: "Fitness, nutrition and mood", scheme: "glyph-well",
-                  iosBundle: "dev.fru.well.ios", macBundle: "dev.fru.well", folder: "Well", ownInstall: false),
+                  iosBundle: "dev.fru.well.ios", macBundle: "dev.fru.well", onTestFlight: false),
         FamilyApp(id: "crm", name: "Glyph CRM", job: "People, places, products, things", scheme: "glyph-crm",
-                  iosBundle: "dev.fru.crm.ios", macBundle: "dev.fru.crm", folder: "CRM", ownInstall: false),
+                  iosBundle: "dev.fru.crm.ios", macBundle: "dev.fru.crm", onTestFlight: false),
         FamilyApp(id: "omega", name: "Glyph Omega", job: "Mission, vision, values and goals", scheme: "glyph-omega",
-                  iosBundle: "dev.fru.omega.ios", macBundle: "dev.fru.omega", folder: "Omega", ownInstall: false),
+                  iosBundle: "dev.fru.omega.ios", macBundle: "dev.fru.omega", onTestFlight: false),
         FamilyApp(id: "studio", name: "Glyph Bot", job: "Your agents, with all of it", scheme: "glyph-studio",
-                  iosBundle: "dev.fru.studio.ios", macBundle: "dev.fru.studio", folder: "Studio", ownInstall: true),
+                  iosBundle: "dev.fru.studio.ios", macBundle: "dev.fru.studio", onTestFlight: false),
         // Mac only, and its own repo (a Tauri app): no iPhone app, and
         // Install All never builds it. It is listed so its version and its routes are visible here.
         FamilyApp(id: "arena", name: "Glyph Arena", job: "The best recipe for each task", scheme: "glyph-arena",
-                  iosBundle: nil, macBundle: "dev.fru.glyph.arena", folder: nil, ownInstall: true),
+                  iosBundle: nil, macBundle: "dev.fru.glyph.arena", onTestFlight: false),
         FamilyApp(id: "connect", name: "Glyph Connect", job: "Where tools plug in", scheme: "glyph-connect",
-                  iosBundle: "dev.fru.connect.ios", macBundle: "dev.fru.connect", folder: "Connect", ownInstall: false),
+                  iosBundle: "dev.fru.connect.ios", macBundle: "dev.fru.connect", onTestFlight: false),
         FamilyApp(id: "wealth", name: "Glyph Wealth", job: "Accounts, spending and what it means", scheme: "glyph-wealth",
-                  iosBundle: "dev.fru.wealth.ios", macBundle: "dev.fru.wealth", folder: "Wealth", ownInstall: false),
+                  iosBundle: "dev.fru.wealth.ios", macBundle: "dev.fru.wealth", onTestFlight: false),
         FamilyApp(id: "life", name: "Glyph Life", job: "Personal administration", scheme: "glyph-life",
-                  iosBundle: "dev.fru.life.ios", macBundle: "dev.fru.life", folder: "Life", ownInstall: false),
+                  iosBundle: "dev.fru.life.ios", macBundle: "dev.fru.life", onTestFlight: false),
         FamilyApp(id: "travel", name: "Glyph X", job: "Trips, bookings and documents", scheme: "glyph-travel",
-                  iosBundle: "dev.fru.travel.ios", macBundle: "dev.fru.travel", folder: "Travel", ownInstall: false),
+                  iosBundle: "dev.fru.travel.ios", macBundle: "dev.fru.travel", onTestFlight: false),
     ]
 }
 

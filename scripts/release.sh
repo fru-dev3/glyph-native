@@ -13,11 +13,11 @@ identity=$(security find-identity -v -p codesigning | awk -F'"' '/Developer ID A
 version=$(awk -F= '/^VERSION=/{print $2; exit}' scripts/build.sh)
 repo=fru-dev3/glyph-native
 # The shared personal-data scan: scripts/public-scan.sh in a mirror, the repo's own beside this folder.
-scan=./scripts/public-scan.sh; [[ -x $scan ]] || scan=../scripts/public-scan.sh
+scan=./scripts/public-scan.sh
 [[ -x $scan ]] || { echo "no public-scan.sh"; exit 1; }
 
 echo "building Glyph Native $version"
-SIGN_IDENTITY="$identity" GLYPH_NATIVE_RELEASE=1 ./scripts/build.sh
+SIGN_IDENTITY="$identity" ./scripts/build.sh
 app="build/Glyph Native.app"
 codesign --verify --strict --deep "$app"
 sig=$(codesign -dvv "$app" 2>&1)

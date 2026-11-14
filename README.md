@@ -11,6 +11,10 @@ Download [Glyph-Native.dmg](https://github.com/fru-dev3/glyph-native/releases/la
 and drag Glyph Native to Applications. It is signed and notarized by Apple. Needs macOS 26 on
 Apple silicon.
 
+## What is new in 0.6.3
+
+- Six more apps install from here: Glyph Well, Wealth, CRM, Omega, Connect and Life. Each is signed and notarized by Apple, and Glyph Native offers the update when one has a newer version.
+
 ## What is new in 0.6.2
 
 - A collapsed sidebar keeps its icons: every filter, group, the Vault and Settings stay one click away.

@@ -54,4 +54,9 @@ echo "not a disk image" > $rel/Foo.dmg
 out=$(inst 2>&1); rc=$?
 check "a corrupted disk image fails and leaves the previous app intact" '(( rc != 0 )) && [[ $(ver) == 1.0.0 && $(ls $t/apps) == Foo.app ]]'
 
+# --tag: the image comes from that named release, not the repo's newest
+mkdir -p $t/base/example/foo/releases/download/foo $t/apps4; makedmg 3.0.0 $t/base/example/foo/releases/download/foo/Foo.dmg
+out=$(inst dev.example.foo --apps $t/apps4 --tag foo 2>&1)
+check "--tag installs from the named release" '[[ $out == *"/releases/download/foo/Foo.dmg"* && $out == *"installed Foo 3.0.0" ]]'
+
 (( fails == 0 )) && echo "all passed" || { echo "$fails failed"; exit 1; }

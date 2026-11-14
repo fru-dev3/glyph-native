@@ -1,6 +1,6 @@
 // swift-tools-version: 6.2
 // Glyph Native: the family's launcher. On the Mac, one window to see every Glyph Native app and
-// install or update them all (scripts/install-all.sh); the iPhone launcher is in project.yml.
+// install or update each from its signed release; the iPhone launcher is in project.yml.
 // NativeKit (the family list) is shared by both. Build the Mac app: scripts/build.sh.
 import PackageDescription
 

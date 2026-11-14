@@ -3,15 +3,16 @@
 # way: nothing is built, a stranger has no source checkout). Every step is a plain line the launcher
 # streams into its log. Never kills a running app, and never leaves a half-copied one in place.
 #   install-release.sh --repo owner/name --asset File.dmg --bundle <bundle id> [--apps <dir>]
-#                      [--team <TeamID>] [--base <url prefix>]
+#                      [--team <TeamID>] [--base <url prefix>] [--tag <release>]
+# --tag: the image is on that named release, not the repo's newest (the apps Glyph Native's repo hosts).
 # --team: only an app signed by that developer is accepted, and Gatekeeper must accept it too. There is
 # deliberately no way to skip those checks once it is given. --base is for tests (a file:// folder).
 set -u
-apps=/Applications base=https://github.com repo= asset= bundle= team=
+apps=/Applications base=https://github.com repo= asset= bundle= team= tag=
 while (( $# )); do
   case $1 in
     --repo) repo=$2; shift 2 ;; --asset) asset=$2; shift 2 ;; --bundle) bundle=$2; shift 2 ;;
-    --apps) apps=$2; shift 2 ;; --team) team=$2; shift 2 ;; --base) base=$2; shift 2 ;;
+    --apps) apps=$2; shift 2 ;; --tag) tag=$2; shift 2 ;; --team) team=$2; shift 2 ;; --base) base=$2; shift 2 ;;
     *) echo "Unknown option $1." >&2; exit 2 ;;
   esac
 done
@@ -23,7 +24,8 @@ mnt=$tmp/mnt
 cleanup() { hdiutil detach -quiet -force "$mnt" 2>/dev/null; rm -rf "$tmp"; }
 trap cleanup EXIT
 
-url=$base/$repo/releases/latest/download/$asset
+rel=latest/download; [[ -n $tag ]] && rel=download/$tag
+url=$base/$repo/releases/$rel/$asset
 echo "Downloading $url"
 curl -fsSL -o "$tmp/$asset" "$url" || fail "Couldn't download $asset from $repo."
 

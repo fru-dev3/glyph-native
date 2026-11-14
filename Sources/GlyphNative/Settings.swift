@@ -69,21 +69,19 @@ struct SettingsSheet: View {
                     row("Hub address", setup.env["GLYPH_VAULT_URL"] ?? "Not set", "settings.hubURL")
                 } header: { Text("Vault") }
                 Section("This Mac") {
-                    row(Shelf.releaseMode ? "Installs apps from" : "Builds apps from", Shelf.repo.map { ($0.path as NSString).abbreviatingWithTildeInPath } ?? "GitHub releases", "settings.repo")
+                    row("Installs apps from", "GitHub releases", "settings.repo")
                 }
-                if Shelf.releaseMode {
-                    Section("Updates") {
-                        LabeledContent("Check for updates") {
-                            HStack(spacing: 12) {
-                                Text(shelf.lastChecked.map { "Last checked at " + $0.formatted(date: .omitted, time: .shortened) } ?? "Not checked yet")
-                                    .foregroundStyle(.secondary)
-                                Button("Check now") { shelf.fetch() }.testFrame("settings.check")
-                            }
+                Section("Updates") {
+                    LabeledContent("Check for updates") {
+                        HStack(spacing: 12) {
+                            Text(shelf.lastChecked.map { "Last checked at " + $0.formatted(date: .omitted, time: .shortened) } ?? "Not checked yet")
+                                .foregroundStyle(.secondary)
+                            Button("Check now") { shelf.fetch() }.testFrame("settings.check")
                         }
                     }
                 }
                 Section("About") {
-                    row(Shelf.releaseMode ? "Glyph Native" : "Glyph Labs", Self.version, "settings.version")
+                    row("Glyph Native", Self.version, "settings.version")
                 }
             }
             .formStyle(.grouped)

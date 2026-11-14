@@ -11,6 +11,9 @@ public struct ReleasedApp: Identifiable, Hashable, Sendable {
     public let job: String
     public let repo: String?       // GitHub "owner/name"; nil when there is no public download
     public let asset: String?      // the disk image's file name on the release
+    /// The release that holds the image when it is not the repo's newest: the apps hosted on Glyph
+    /// Native's own repo each have a rolling release named for the app, beside a version.txt.
+    public let tag: String?
     public let macBundle: String?
     /// An earlier app's bundle id that this one replaces: never offered, never touched, only noticed.
     public let retiredBundle: String?
@@ -22,14 +25,19 @@ public struct ReleasedApp: Identifiable, Hashable, Sendable {
         return "https://glyph.fru.dev" + (own.contains(id) ? "/" + id : "")
     }
     public var hasDownload: Bool { repo != nil && asset != nil }
-    public var downloadURL: URL? { hasDownload ? URL(string: "https://github.com/\(repo!)/releases/latest/download/\(asset!)") : nil }
-    public var latestURL: URL? { repo.flatMap { URL(string: "https://github.com/\($0)/releases/latest") } }
-    public init(id: String, name: String, job: String, repo: String? = nil, asset: String? = nil, macBundle: String? = nil, retiredBundle: String? = nil, group: String, site: String? = nil) {
-        self.id = id; self.name = name; self.job = job; self.repo = repo; self.asset = asset; self.macBundle = macBundle; self.retiredBundle = retiredBundle; self.group = group; self.site = site
+    public var downloadURL: URL? {
+        guard hasDownload else { return nil }
+        return URL(string: "https://github.com/\(repo!)/releases/" + (tag.map { "download/\($0)" } ?? "latest/download") + "/\(asset!)")
     }
-    /// The same app as a FamilyApp, so the one AppCard draws both modes.
+    /// Where a hosted app's newest version is written, as plain text ("0.1.7").
+    public var versionURL: URL? { hasDownload ? tag.flatMap { URL(string: "https://github.com/\(repo!)/releases/download/\($0)/version.txt") } : nil }
+    public var latestURL: URL? { repo.flatMap { URL(string: "https://github.com/\($0)/releases/latest") } }
+    public init(id: String, name: String, job: String, repo: String? = nil, asset: String? = nil, tag: String? = nil, macBundle: String? = nil, retiredBundle: String? = nil, group: String, site: String? = nil) {
+        self.id = id; self.name = name; self.job = job; self.repo = repo; self.asset = asset; self.tag = tag; self.macBundle = macBundle; self.retiredBundle = retiredBundle; self.group = group; self.site = site
+    }
+    /// The same app as a FamilyApp, so one card draws it.
     public var family: FamilyApp {
-        FamilyApp(id: id, name: name, job: job, scheme: "", iosBundle: nil, macBundle: macBundle, folder: nil, ownInstall: false)
+        FamilyApp(id: id, name: name, job: job, scheme: "", iosBundle: nil, macBundle: macBundle, onTestFlight: false)
     }
 }
 
@@ -47,12 +55,12 @@ public enum Release {
                     repo: "fru-dev3/glyph-cast", asset: "Glyph-Cast.dmg", macBundle: "dev.fru.capture", group: "Tools"),
         ReleasedApp(id: "time", name: "Glyph Time", job: "Where your hours go",
                     repo: "fru-dev3/glyph-time", asset: "Glyph-Time.dmg", macBundle: "dev.fru.time", group: "Tools"),
-        ReleasedApp(id: "connect", name: "Glyph Connect", job: "Where tools plug in", macBundle: "dev.fru.connect", group: "Tools"),
-        ReleasedApp(id: "well", name: "Glyph Well", job: "Fitness, nutrition and mood", macBundle: "dev.fru.well", group: "Your life"),
-        ReleasedApp(id: "crm", name: "Glyph CRM", job: "People, places, products, things", macBundle: "dev.fru.crm", group: "Your life"),
-        ReleasedApp(id: "omega", name: "Glyph Omega", job: "Mission, vision, values and goals", macBundle: "dev.fru.omega", group: "Your life"),
-        ReleasedApp(id: "wealth", name: "Glyph Wealth", job: "Accounts, spending and what it means", macBundle: "dev.fru.wealth", group: "Your life"),
-        ReleasedApp(id: "life", name: "Glyph Life", job: "Personal administration", macBundle: "dev.fru.life", group: "Your life"),
+        ReleasedApp(id: "connect", name: "Glyph Connect", job: "Where tools plug in", repo: "fru-dev3/glyph-native", asset: "Glyph-Connect.dmg", tag: "connect", macBundle: "dev.fru.connect", group: "Tools"),
+        ReleasedApp(id: "well", name: "Glyph Well", job: "Fitness, nutrition and mood", repo: "fru-dev3/glyph-native", asset: "Glyph-Well.dmg", tag: "well", macBundle: "dev.fru.well", group: "Your life"),
+        ReleasedApp(id: "crm", name: "Glyph CRM", job: "People, places, products, things", repo: "fru-dev3/glyph-native", asset: "Glyph-CRM.dmg", tag: "crm", macBundle: "dev.fru.crm", group: "Your life"),
+        ReleasedApp(id: "omega", name: "Glyph Omega", job: "Mission, vision, values and goals", repo: "fru-dev3/glyph-native", asset: "Glyph-Omega.dmg", tag: "omega", macBundle: "dev.fru.omega", group: "Your life"),
+        ReleasedApp(id: "wealth", name: "Glyph Wealth", job: "Accounts, spending and what it means", repo: "fru-dev3/glyph-native", asset: "Glyph-Wealth.dmg", tag: "wealth", macBundle: "dev.fru.wealth", group: "Your life"),
+        ReleasedApp(id: "life", name: "Glyph Life", job: "Personal administration", repo: "fru-dev3/glyph-native", asset: "Glyph-Life.dmg", tag: "life", macBundle: "dev.fru.life", group: "Your life"),
         ReleasedApp(id: "travel", name: "Glyph X", job: "Trips, bookings and documents", macBundle: "dev.fru.travel", group: "Your life"),
     ]
 
@@ -74,7 +82,7 @@ public enum Release {
     }
 
     /// Dot-separated whole numbers ("v0.10.0" is [0, 10, 0]); anything else is nil.
-    static func numbers(_ v: String) -> [Int]? {
+    public static func numbers(_ v: String) -> [Int]? {
         let s = v.hasPrefix("v") ? String(v.dropFirst()) : v
         let p = s.split(separator: ".", omittingEmptySubsequences: false).map { Int($0) }
         return p.isEmpty || p.contains(where: { $0 == nil }) ? nil : p.map { $0! }
