@@ -106,6 +106,13 @@ public enum Release {
         return ""
     }
 
+    /// Glyph Native's own download, for the one app this app cannot install the usual way: itself.
+    /// A running app cannot be copied over, so the update is fetched and opened, and the person
+    /// drags it across as they did the first time (Fru, 2026-11-15: "make the updates work").
+    public static let ownRepo = "fru-dev3/glyph-native"
+    public static var ownLatestURL: URL? { URL(string: "https://github.com/\(ownRepo)/releases/latest") }
+    public static var ownDownloadURL: URL? { URL(string: "https://github.com/\(ownRepo)/releases/latest/download/Glyph-Native.dmg") }
+
     /// The second line on a card whose new app is not installed while the retired one is.
     public static func retiredLine(retiredInstalled: Bool, installed: Bool, name: String) -> String? {
         retiredInstalled && !installed ? "The earlier \(name) is installed and retired." : nil

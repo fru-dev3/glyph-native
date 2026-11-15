@@ -1,3 +1,4 @@
+import GlyphCapture
 import SwiftUI
 import AppKit
 import NativeKit
@@ -71,8 +72,8 @@ final class Delegate: NSObject, NSApplicationDelegate {
 }
 
 extension Color {
-    static let nativeGreen = Color(NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        ? NSColor(red: 0.18, green: 0.68, blue: 0.18, alpha: 1) : NSColor(red: 0, green: 128 / 255, blue: 0, alpha: 1) })
+    /// The family's brand green (GlyphCapture): #008000, lifted to #2eae2e on black.
+    static let nativeGreen = Color.glyphGreen
 
     /// One token, two appearances: the family's Mac value in the dark, the Mac's own colour in the
     /// light. Light is held as it is until Fru says whether the launcher stays light at all.
@@ -138,6 +139,12 @@ final class Shelf: ObservableObject {
     @Published var lastResult: Bool?
     @Published var uiHover: String?          // a UI test's stand-in for the pointer resting on a card
     @Published var lastChecked: Date?        // when the last GitHub check finished
+    /// Glyph Native's own newest release, when there is one newer than this copy. The app
+    /// installs every other app and could not say a word about itself (Fru, 2026-11-15: "make
+    /// the updates work"), so an old copy went on installing new apps and never mentioned it.
+    @Published var ownUpdate: String?
+    /// While its own update is downloading.
+    @Published var gettingOwn = false
     @Published var showSettings = false      // the gear and Cmd-,
     @Published var notes: [String: String] = [:]   // app id to a short line on its card for a few seconds
     private var noteSeq: [String: Int] = [:]
@@ -171,6 +178,36 @@ final class Shelf: ObservableObject {
     /// Asks GitHub again for what is newest.
     func fetch() { fetchReleases() }
 
+    /// This app's own newest release, by the same redirect its apps use. Only a version strictly
+    /// newer than the one running counts, so a copy built ahead of the release says nothing.
+    private func fetchOwn() async {
+        guard let url = Release.ownLatestURL else { return }
+        var req = URLRequest(url: url, timeoutInterval: 15)
+        req.httpMethod = "HEAD"
+        let found = (try? await URLSession.shared.data(for: req))?.1.url.flatMap(Release.tag(from:))
+        let mine = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        ownUpdate = found.flatMap { Release.isNewer($0, than: mine) ? $0 : nil }
+    }
+
+    /// Fetches the new disk image and opens it, which is the one way an app can update itself:
+    /// a running app cannot be copied over, so the person drags it across as they did the first
+    /// time. It lands in Downloads, where they can find it again.
+    func getOwnUpdate() {
+        guard !gettingOwn, let url = Release.ownDownloadURL else { return }
+        gettingOwn = true
+        Task {
+            defer { Task { @MainActor in self.gettingOwn = false } }
+            guard let (file, _) = try? await URLSession.shared.download(from: url) else {
+                await MainActor.run { self.log = "Couldn't download the update."; self.lastResult = false }
+                return
+            }
+            let to = URL.downloadsDirectory.appending(path: "Glyph-Native.dmg")
+            try? FileManager.default.removeItem(at: to)
+            try? FileManager.default.moveItem(at: file, to: to)
+            await MainActor.run { NSWorkspace.shared.open(FileManager.default.fileExists(atPath: to.path) ? to : file) }
+        }
+    }
+
     /// Asks GitHub for each app's newest tag: the redirect of /releases/latest, no API (it is rate limited).
     private func fetchReleases() {
         Task {
@@ -191,6 +228,7 @@ final class Shelf: ObservableObject {
                 for await (id, v) in g { if let v { found[id] = v } }
             }
             latest = found; looked = true; lastChecked = .now; refresh()
+            await fetchOwn()
         }
     }
 

@@ -21,23 +21,33 @@ public struct AnswerSettings: Codable, Equatable, Sendable {
     public var privateApps: [String]
     public var engines: [String: Engine]
     public var councilAvailable: Bool
+    /// Which Claude to ask for: "default" (the CLI's own newest), "haiku", "sonnet" or "opus".
+    /// Fru, 2026-11-15, seeing "haiku" under the Claude card: "What if I want ... opus, or
+    /// sonnet, or some different model, the latest model, how would I say like that?"
+    public var model: String
 
     public init(choice: [String] = ["auto"], apps: [String: [String]] = [:], surfaces: [String] = [], privateApps: [String] = [],
-                engines: [String: Engine] = [:], councilAvailable: Bool = false) {
+                engines: [String: Engine] = [:], councilAvailable: Bool = false, model: String = "default") {
         self.choice = choice; self.apps = apps; self.surfaces = surfaces; self.privateApps = privateApps
-        self.engines = engines; self.councilAvailable = councilAvailable
+        self.engines = engines; self.councilAvailable = councilAvailable; self.model = model
     }
+
+    /// The Claudes a person can pick, in the order they are offered. Aliases, never pinned model
+    /// ids: the CLI maps each to the current model of that name, so this does not go stale.
+    public static let models = ["default", "opus", "sonnet", "haiku"]
+    public static let modelNames = ["default": "Latest", "opus": "Opus", "sonnet": "Sonnet", "haiku": "Haiku"]
 
     /// The hub's GET /native/settings reply (also what PUT returns); nil when it is not one.
     public static func decode(_ data: Data) -> AnswerSettings? {
         struct Wire: Decodable {
-            struct Answers: Decodable { var `default`: [String]?; var apps: [String: [String]]? }
+            struct Answers: Decodable { var `default`: [String]?; var apps: [String: [String]]?; var model: String? }
             struct Council: Decodable { var available: Bool? }
             var answers: Answers?; var engines: [String: Engine]?; var council: Council?; var surfaces: [String]?; var `private`: [String]?
         }
         guard let w = try? JSONDecoder().decode(Wire.self, from: data), let a = w.answers, let d = a.default, !d.isEmpty else { return nil }
         return AnswerSettings(choice: d, apps: a.apps ?? [:], surfaces: w.surfaces ?? [], privateApps: w.private ?? [],
-                              engines: w.engines ?? [:], councilAvailable: w.council?.available ?? false)
+                              engines: w.engines ?? [:], councilAvailable: w.council?.available ?? false,
+                              model: a.model ?? "default")
     }
 
     /// What answers this app: its own entry, else the default.
@@ -87,9 +97,10 @@ extension Hub {
         return got
     }
 
-    /// Saves the family default and the apps' own choices, and returns what the hub read back (nil: not saved).
-    public func saveAnswers(choice: [String], apps: [String: [String]]) async -> AnswerSettings? {
-        let body: [String: Any] = ["answers": ["default": choice, "apps": apps]]
+    /// Saves the family default, the apps' own choices and which Claude to ask for, and returns
+    /// what the hub read back (nil: not saved). `claude` is an alias ("opus"), never a model id.
+    public func saveAnswers(choice: [String], apps: [String: [String]], claude: String = "default") async -> AnswerSettings? {
+        let body: [String: Any] = ["answers": ["default": choice, "apps": apps, "model": claude]]
         guard let data = try? JSONSerialization.data(withJSONObject: body),
               let (code, reply) = await send("PUT", "native/settings", body: data), code == 200, let got = AnswerSettings.decode(reply) else { return nil }
         AnswerSettings.cached = got

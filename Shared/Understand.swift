@@ -28,17 +28,11 @@ extension Router {
         return out
     }
 
-    /// Told not to do anything ("don't do anything", "just testing", "never mind", "ignore that"): no jobs, whatever
-    /// else was said. (Glyph Time's `VoiceForm.declined` reads the same.)
-    // ponytail: the same patterns as Time's VoiceParse.swift; one copy in GlyphCore if a third app needs them.
-    public static func declined(_ words: String) -> Bool {
-        let s = " " + words.lowercased().replacingOccurrences(of: "\u{2019}", with: "'").replacingOccurrences(of: "just ", with: "")
-            .map { $0.isLetter || $0.isNumber || $0 == "'" ? $0 : " " }.reduce(into: "") { $0.append($1) } + " "
-        return s.range(of: #"\b(do ?n'?t|do not|did ?n'?t|did not|no need to)( want you to| need you to)? (do|set|start|make|create|add|change) (anything|nothing|a thing)\b"#
-            + #"|\b(did ?n'?t|did not|never) ask(ed)?( you)? (for|to)\b|\b(this is|it's|its|that was) (only )?a test\b|^ *testing\b"#
-            + #"|\btesting (you|your|this|the app|the mic|the microphone|it)\b|\bnever ?mind\b|\bignore (that|this|me|it)\b|\bforget (it|that|about it)\b"#,
-            options: .regularExpression) != nil
-    }
+    /// Told not to do anything ("don't do anything", "you don't need to set anything", "never mind",
+    /// "nothing to do"): no jobs, whatever else was said. GlyphVault's `Spoken.declined` is the one
+    /// definition. This copy had four patterns fewer than Glyph Time's, so five phrases in ten that
+    /// Glyph Time refused were dispatched here as real jobs.
+    public static func declined(_ words: String) -> Bool { Spoken.declined(words) }
 
     /// A question or a greeting with no app's word in it ("what time is it in London", "hello, how are you"): no job.
     static func talk(_ part: String) -> Bool {

@@ -79,6 +79,19 @@ struct SettingsSheet: View {
                             Button("Check now") { shelf.fetch() }.testFrame("settings.check")
                         }
                     }
+                    // This app's own update. It installs every other app and said nothing about
+                    // itself (Fru, 2026-11-15: "make the updates work"), so an old copy went on
+                    // installing new apps with no sign that it was old.
+                    if let v = shelf.ownUpdate {
+                        LabeledContent("Glyph Native \(v) is out") {
+                            HStack(spacing: 12) {
+                                Text("You have \(Self.version)").foregroundStyle(.secondary)
+                                Button(shelf.gettingOwn ? "Downloading" : "Get it") { shelf.getOwnUpdate() }
+                                    .disabled(shelf.gettingOwn)
+                                    .testFrame("settings.own-update")
+                            }
+                        }
+                    }
                 }
                 Section("About") {
                     row("Glyph Native", Self.version, "settings.version")
@@ -215,6 +228,27 @@ struct SettingsPage<Toggle: View>: View {
             ForEach(["auto"] + AnswerSettings.engineIds, id: \.self) { id in
                 EngineTile(id: id, answers: answers)
             }
+        }
+        // Which Claude, when Claude is one of the ticked ones. Aliases, never pinned ids: the
+        // CLI maps each to the current model of that name (Fru, 2026-11-15, seeing "haiku" under
+        // the Claude card: "What if I want ... opus, or sonnet, or some different model, the
+        // latest model, how would I say like that?").
+        if let s = answers.settings, s.choice.contains("claude") || s.choice.contains("auto") {
+            HStack(spacing: 12) {
+                Text("Which Claude").font(.system(size: 14.5, weight: .medium)).foregroundStyle(Token.rowText)
+                Picker("", selection: Binding(get: { s.model }, set: { m in Task { await answers.pick(claude: m) } })) {
+                    ForEach(AnswerSettings.models, id: \.self) { m in
+                        Text(AnswerSettings.modelNames[m] ?? m.capitalized).tag(m)
+                    }
+                }
+                .labelsHidden().pickerStyle(.segmented).frame(width: 320)
+                .disabled(answers.busy || answers.away)
+                .testFrame("answers.claude-model")
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16).padding(.vertical, 11)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Token.raised))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Token.border))
         }
         VStack(spacing: 0) {
             if answers.severalTicked {

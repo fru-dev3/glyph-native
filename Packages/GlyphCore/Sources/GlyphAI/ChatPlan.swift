@@ -113,8 +113,34 @@ extension Hub {
     /// One chat turn to Glyph Core Intelligence: `surface` is the app ("time", "well", "jot", "crm", "omega",
     /// "studio", "native"), `history` the turns before (the last 6 are sent), `period` "today" or "week" when the
     /// app has one. Nil when the hub or Claude can't be reached (503): return nil from `respond` and GlyphChat says so and keeps the words.
+    /// Reads `GET /crm/names` into `EntityScan.shared`, once. The hub answers with every entity
+    /// page's id, name, kind and aliases, which is exactly what the scanner needs, so there is no
+    /// second route and no second idea of what an entity is called.
+    public func readRegister() async {
+        if await MainActor.run(body: { EntityScan.shared != nil }) { return }
+        guard let (code, data) = await send("GET", "crm/names"), code == 200,
+              let rows = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] else { return }
+        let known: [EntityScan.Known] = rows.compactMap { r in
+            guard let id = r["id"] as? String, let name = r["name"] as? String,
+                  let kind = (r["kind"] as? String).flatMap(CRMKind.init(prefix:)) else { return nil }
+            return EntityScan.Known(id: id, kind: kind, name: name, aliases: r["aliases"] as? [String] ?? [])
+        }
+        guard !known.isEmpty else { return }
+        let scan = EntityScan(known)
+        await MainActor.run { EntityScan.shared = scan }
+    }
+
     public func understand(surface: String, text: String, history: [ChatTurn] = [], period: String? = nil, preferences: String? = nil,
                            now: Date = .now, timeZone: TimeZone = .current) async -> ChatPlan? {
+        // Anything a write kept while the hub was away goes first. `flush()` says "call on launch and
+        // before each turn", and four of the eleven apps did: Glyph Jot, Well, Wealth, Omega, CRM and
+        // Time told Fru "Kept on this iPhone, sends when the hub is back" and then never sent it,
+        // because the outbox is each app's own UserDefaults and no other app can drain it. Every turn
+        // in every app begins here, so no app has to remember any more.
+        await flush()
+        // And the register, once a session, so an answer can link the people, places, orgs, things
+        // and tags it names. Every app's turn comes through here, so none of them has to ask.
+        await readRegister()
         let f = ISO8601DateFormatter(); f.timeZone = timeZone; f.formatOptions = [.withInternetDateTime]
         var body: [String: Any] = ["surface": surface, "text": text, "now": f.string(from: now), "tz": timeZone.identifier,
                                    "history": history.suffix(6).map { ["role": $0.mine ? "user" : "app", "text": $0.text] }]

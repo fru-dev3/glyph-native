@@ -14,7 +14,19 @@ public struct FamilyApp: Identifiable, Hashable, Sendable {
     /// record in App Store Connect has nowhere to install it from but a Mac, and says so.
     /// Checked 2026-11-13: only Glyph Jot ("Glyph by fru.dev") has one, with five valid builds.
     public let onTestFlight: Bool
-    public var url: URL { URL(string: "\(scheme)://")! }
+    /// A layer of the family that is not an app at all: Glyph Ibis is the context sources on the
+    /// web. Fru, 2026-11-15: "Why is glyph ibis not an app on mobile launcher glyph native?" It
+    /// was missing because this list only held things with a bundle to launch. A web entry opens
+    /// its address and is never offered as an install.
+    public let site: String?
+    public var url: URL { site.flatMap { URL(string: $0) } ?? URL(string: "\(scheme)://")! }
+    public var isWeb: Bool { site != nil }
+
+    public init(id: String, name: String, job: String, scheme: String, iosBundle: String?, macBundle: String?,
+                onTestFlight: Bool, site: String? = nil) {
+        self.id = id; self.name = name; self.job = job; self.scheme = scheme
+        self.iosBundle = iosBundle; self.macBundle = macBundle; self.onTestFlight = onTestFlight; self.site = site
+    }
 }
 
 public enum Family {
@@ -35,6 +47,10 @@ public enum Family {
         // Install All never builds it. It is listed so its version and its routes are visible here.
         FamilyApp(id: "arena", name: "Glyph Arena", job: "The best recipe for each task", scheme: "glyph-arena",
                   iosBundle: nil, macBundle: "dev.fru.glyph.arena", onTestFlight: false),
+        // Not an app: the context sources, on the web. It belongs on this page because it is one
+        // of the family's four layers, and leaving it off was the page saying it does not exist.
+        FamilyApp(id: "ibis", name: "Glyph Ibis", job: "What the world knows", scheme: "",
+                  iosBundle: nil, macBundle: nil, onTestFlight: false, site: "https://glyph.fru.dev/ibis"),
         FamilyApp(id: "connect", name: "Glyph Connect", job: "Where tools plug in", scheme: "glyph-connect",
                   iosBundle: "dev.fru.connect.ios", macBundle: "dev.fru.connect", onTestFlight: false),
         FamilyApp(id: "wealth", name: "Glyph Wealth", job: "Accounts, spending and what it means", scheme: "glyph-wealth",

@@ -77,9 +77,19 @@ public final class AnswersModel: ObservableObject {
         s.apps.filter { !(s.privateApps.contains($0.key) && $0.value == ["ollama"]) }
     }
 
-    private func save(choice: [String], apps: [String: [String]]) async {
+    /// Which Claude every app asks for: "Latest", "Opus", "Sonnet" or "Haiku" (Fru, 2026-11-15:
+    /// "What if I want ... opus, or sonnet, or some different model, the latest model, how would
+    /// I say like that?"). Stored in the vault beside the choice of engine, so every app on every
+    /// device follows it.
+    public func pick(claude: String) async {
+        guard let s = settings else { return }
+        await save(choice: s.choice, apps: stored(s), claude: claude)
+    }
+
+    private func save(choice: [String], apps: [String: [String]], claude: String? = nil) async {
         busy = true; saveFailed = false
-        if let got = await hub.saveAnswers(choice: choice, apps: apps) { settings = got; away = false }
+        let model = claude ?? settings?.model ?? "default"
+        if let got = await hub.saveAnswers(choice: choice, apps: apps, claude: model) { settings = got; away = false }
         else { saveFailed = true; if let again = await hub.fetchAnswers() { settings = again } else { away = true; settings = nil } }
         busy = false
     }
