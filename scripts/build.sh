@@ -16,7 +16,7 @@ if pmset -g batt 2>/dev/null | grep -q InternalBattery && [[ -z ${GLYPH_UI_HOST:
 fi
 cd "$(dirname "$0")/.."
 
-VERSION=0.6.4
+VERSION=0.6.5
 BUILD=14
 
 [[ -d /Applications/Xcode.app ]] && export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer} # the on-device model's macros
@@ -42,6 +42,9 @@ cp scripts/install-release.sh "$APP/Contents/Resources/"
 # apps itself (Glyph Labs, Install All) was retired 2026-11-13. GLYPH_NATIVE_RELEASE is no longer read.
 NAME="Glyph Native"
 
+# The analytics key, from this machine's own env file and never from the source (GlyphMetrics).
+# A build without it reports nowhere, which is what a build from the public source does.
+POSTHOG_KEY=${POSTHOG_KEY:-$(awk -F= '/^POSTHOG_KEY=/{print $2; exit}' ~/.ai/env/posthog.env 2>/dev/null)}
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -54,6 +57,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>PostHogKey</key><string>$POSTHOG_KEY</string>
   <key>CFBundleVersion</key><string>$BUILD</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
   <key>LSMinimumSystemVersion</key><string>26.0</string>

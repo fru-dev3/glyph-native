@@ -1,12 +1,19 @@
 import Foundation
 
-/// This Mac's vault when none is chosen in Settings: the Glyph Bot vault, read from Studio's
-/// own config (never assumed). The path keeps the `prevail` name on purpose, so an existing
-/// install keeps working. It goes into the public copy as it is: it holds a product path and
+/// This Mac's vault when none is chosen in Settings: the Glyph Bot vault, read from Glyph Bot's
+/// own config (never assumed). It goes into the public copy as it is: it holds a product path and
 /// nothing personal, and a stand-in there is what shipped a launcher that knew the vault while no
 /// other app could see it (Fru, 2026-11-15).
 enum LocalVault {
-    private static var config: URL { URL.homeDirectory.appending(path: ".prevail/config.json") }
+    /// Where this Mac writes down which folder is the vault: `~/.glyph/config.json`. A Mac set up
+    /// before the name changed keeps its older folder, which `~/.glyph` usually links to, so that
+    /// one is read and written when it is the only one there.
+    private static var config: URL {
+        let here = URL.homeDirectory.appending(path: ".glyph/config.json")
+        if FileManager.default.fileExists(atPath: here.path) { return here }
+        let older = URL.homeDirectory.appending(path: ".prevail/config.json")
+        return FileManager.default.fileExists(atPath: older.path) ? older : here
+    }
 
     /// Chooses the vault: writes `vaultPath` into the same config `path` reads, keeping every other key.
     static func set(_ path: String) {

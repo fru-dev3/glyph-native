@@ -58,6 +58,13 @@ import SwiftUI
         return GlyphTagHash.color(name)
     }
 
+    /// The tags one app works in, from any thread: its own subset of the register, in the
+    /// register's order. An app shows these and nothing else, so Glyph Well offers stool, food and
+    /// workout rather than every tag in the vault.
+    nonisolated public static func forApp(_ app: String) -> [GlyphTag] {
+        all.filter { $0.belongs(to: app) }
+    }
+
     /// What a tag covers, for a picker that explains itself. nil for one he has just made.
     nonisolated public static func covers(_ name: String) -> String? {
         let key = GlyphTag.slug(name)
@@ -84,7 +91,7 @@ import SwiftUI
               (response as? HTTPURLResponse)?.statusCode == 200,
               let rows = try? JSONDecoder().decode([Row].self, from: data) else { return false }
         let tags = rows.filter { $0.kind == "tag" }.map {
-            GlyphTag(name: $0.name, covers: $0.covers, hex: $0.color, aliases: $0.aliases ?? [])
+            GlyphTag(name: $0.name, covers: $0.covers, hex: $0.color, aliases: $0.aliases ?? [], apps: $0.apps ?? [])
         }
         guard !tags.isEmpty else { return false }
         take(tags)
@@ -106,6 +113,9 @@ import SwiftUI
     /// The colour a tag is drawn in everywhere: its own, from its page, or the family's hash of
     /// its name for one he has just made.
     public func color(_ name: String) -> Color { Self.color(name) }
+
+    /// This app's own tags. See the static twin.
+    public func forApp(_ app: String) -> [GlyphTag] { all.filter { $0.belongs(to: app) } }
 
     /// A tag made in an app joins the register, so the next app to look sees it. Glyph Jot's
     /// memos and Glyph Well's entries register their tags by being saved; an app that files by
@@ -143,7 +153,8 @@ import SwiftUI
             let unquote: (String?) -> String? = { $0?.trimmingCharacters(in: CharacterSet(charactersIn: "\"")) }
             guard let name = unquote(front["name"]), !name.isEmpty else { continue }
             let aliases = (try? JSONDecoder().decode([String].self, from: Data((front["aliases"] ?? "[]").utf8))) ?? []
-            tags.append(GlyphTag(name: name, covers: unquote(front["covers"]), hex: unquote(front["color"]), aliases: aliases))
+            let apps = (try? JSONDecoder().decode([String].self, from: Data((front["apps"] ?? "[]").utf8))) ?? []
+            tags.append(GlyphTag(name: name, covers: unquote(front["covers"]), hex: unquote(front["color"]), aliases: aliases, apps: apps))
         }
         guard !tags.isEmpty else { return false }
         take(tags)
@@ -160,11 +171,24 @@ import SwiftUI
         let aliases: [String]?
         let covers: String?
         let color: String?
+        let apps: [String]?
     }
 }
 
 /// One tag as the register holds it.
 public struct GlyphTag: Codable, Identifiable, Hashable, Sendable {
+    // `apps` arrived after tags were already kept on devices, so a kept tag without it decodes
+    // as empty rather than failing and emptying the picker.
+    enum CodingKeys: String, CodingKey { case name, covers, hex, aliases, apps }
+    public init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        covers = try c.decodeIfPresent(String.self, forKey: .covers)
+        hex = try c.decodeIfPresent(String.self, forKey: .hex)
+        aliases = try c.decodeIfPresent([String].self, forKey: .aliases) ?? []
+        apps = try c.decodeIfPresent([String].self, forKey: .apps) ?? []
+    }
+
     public let name: String
     /// The one line on what belongs under it, shown under the name in a picker.
     public let covers: String?
@@ -172,9 +196,25 @@ public struct GlyphTag: Codable, Identifiable, Hashable, Sendable {
     public let hex: String?
     /// Older spellings of the same tag. A note written with one still reads.
     public let aliases: [String]
+    /// The apps this tag belongs to, by their family id ("well", "crm", "jot"). Empty means it
+    /// belongs to the apps that hold everything, Glyph CRM and Glyph Jot, and to no other.
+    ///
+    /// Fru, 2026-11-15: "every app will have tags, like for well, which is health... and this is
+    /// a subset of the tags in CRM. So you have things like tag for stool, tag for food, tag for
+    /// a workout, tag for feeling." The subset is written on the tag's own page in the register,
+    /// never in an app, so moving a tag between apps is editing one file in the vault.
+    public let apps: [String]
 
-    public init(name: String, covers: String? = nil, hex: String? = nil, aliases: [String] = []) {
-        self.name = name; self.covers = covers; self.hex = hex; self.aliases = aliases
+    public init(name: String, covers: String? = nil, hex: String? = nil, aliases: [String] = [], apps: [String] = []) {
+        self.name = name; self.covers = covers; self.hex = hex; self.aliases = aliases; self.apps = apps
+    }
+
+    /// Glyph CRM and Glyph Jot hold every tag: one is the register itself and the other captures
+    /// anything. Every other app shows the subset its own page names, and a tag that names no app
+    /// belongs to those two alone.
+    public func belongs(to app: String) -> Bool {
+        if app == "crm" || app == "jot" { return true }
+        return apps.contains(app)
     }
 
     public var id: String { Self.slug(name) }
