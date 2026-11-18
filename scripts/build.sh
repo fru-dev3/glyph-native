@@ -16,7 +16,7 @@ if pmset -g batt 2>/dev/null | grep -q InternalBattery && [[ -z ${GLYPH_UI_HOST:
 fi
 cd "$(dirname "$0")/.."
 
-VERSION=0.6.5
+VERSION=0.6.6
 BUILD=14
 
 [[ -d /Applications/Xcode.app ]] && export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer} # the on-device model's macros
