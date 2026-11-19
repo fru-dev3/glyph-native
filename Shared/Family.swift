@@ -31,33 +31,33 @@ public struct FamilyApp: Identifiable, Hashable, Sendable {
 
 public enum Family {
     public static let apps: [FamilyApp] = [
-        FamilyApp(id: "jot", name: "Glyph Jot", job: "Personal context", scheme: "jot",
+        FamilyApp(id: "jot", name: "Glyph Jot", job: "Capture your ideas locally", scheme: "jot",
                   iosBundle: "dev.fru.jot", macBundle: "dev.fru.jot.mac", onTestFlight: true),
-        FamilyApp(id: "time", name: "Glyph Time", job: "Where your hours go", scheme: "glyph-time",
+        FamilyApp(id: "time", name: "Glyph Time", job: "Time tracking that tracks itself", scheme: "glyph-time",
                   iosBundle: "dev.fru.time.ios", macBundle: "dev.fru.time", onTestFlight: false),
-        FamilyApp(id: "well", name: "Glyph Well", job: "Fitness, nutrition and mood", scheme: "glyph-well",
+        FamilyApp(id: "well", name: "Glyph Well", job: "Wellness, fitness and health, in one log", scheme: "glyph-well",
                   iosBundle: "dev.fru.well.ios", macBundle: "dev.fru.well", onTestFlight: false),
-        FamilyApp(id: "crm", name: "Glyph CRM", job: "People, places, products, things", scheme: "glyph-crm",
+        FamilyApp(id: "crm", name: "Glyph CRM", job: "Everyone and everything you know", scheme: "glyph-crm",
                   iosBundle: "dev.fru.crm.ios", macBundle: "dev.fru.crm", onTestFlight: false),
-        FamilyApp(id: "omega", name: "Glyph Omega", job: "Mission, vision, values and goals", scheme: "glyph-omega",
+        FamilyApp(id: "omega", name: "Glyph Omega", job: "Your mission, where agents can read it", scheme: "glyph-omega",
                   iosBundle: "dev.fru.omega.ios", macBundle: "dev.fru.omega", onTestFlight: false),
-        FamilyApp(id: "studio", name: "Glyph Bot", job: "Your agents, with all of it", scheme: "glyph-studio",
+        FamilyApp(id: "studio", name: "Glyph Bot", job: "Where your agents get to work", scheme: "glyph-studio",
                   iosBundle: "dev.fru.studio.ios", macBundle: "dev.fru.studio", onTestFlight: false),
         // Mac only, and its own repo (a Tauri app): no iPhone app, and
         // Install All never builds it. It is listed so its version and its routes are visible here.
-        FamilyApp(id: "arena", name: "Glyph Arena", job: "The best recipe for each task", scheme: "glyph-arena",
+        FamilyApp(id: "arena", name: "Glyph Arena", job: "Stop guessing which model", scheme: "glyph-arena",
                   iosBundle: nil, macBundle: "dev.fru.glyph.arena", onTestFlight: false),
         // Not an app: the context sources, on the web. It belongs on this page because it is one
         // of the family's four layers, and leaving it off was the page saying it does not exist.
-        FamilyApp(id: "ibis", name: "Glyph Ibis", job: "What the world knows", scheme: "",
+        FamilyApp(id: "ibis", name: "Glyph Ibis", job: "Global context for your agents", scheme: "",
                   iosBundle: nil, macBundle: nil, onTestFlight: false, site: "https://glyph.fru.dev/ibis"),
-        FamilyApp(id: "connect", name: "Glyph Connect", job: "Where tools plug in", scheme: "glyph-connect",
+        FamilyApp(id: "connect", name: "Glyph Connect", job: "Plug your agents into the apps you use", scheme: "glyph-connect",
                   iosBundle: "dev.fru.connect.ios", macBundle: "dev.fru.connect", onTestFlight: false),
-        FamilyApp(id: "wealth", name: "Glyph Wealth", job: "Accounts, spending and what it means", scheme: "glyph-wealth",
+        FamilyApp(id: "wealth", name: "Glyph Wealth", job: "The AI ledger that never guesses", scheme: "glyph-wealth",
                   iosBundle: "dev.fru.wealth.ios", macBundle: "dev.fru.wealth", onTestFlight: false),
-        FamilyApp(id: "life", name: "Glyph Life", job: "Personal administration", scheme: "glyph-life",
+        FamilyApp(id: "life", name: "Glyph Life", job: "The paperwork handles itself", scheme: "glyph-life",
                   iosBundle: "dev.fru.life.ios", macBundle: "dev.fru.life", onTestFlight: false),
-        FamilyApp(id: "travel", name: "Glyph X", job: "Trips, bookings and documents", scheme: "glyph-travel",
+        FamilyApp(id: "travel", name: "Glyph X", job: "Travel and exploration", scheme: "glyph-travel",
                   iosBundle: "dev.fru.travel.ios", macBundle: "dev.fru.travel", onTestFlight: false),
     ]
 }
