@@ -12,7 +12,7 @@ public struct FamilyApp: Identifiable, Hashable, Sendable {
     public let macBundle: String?
     /// This app has a build on TestFlight, so the iPhone can install it by itself. An app with no
     /// record in App Store Connect has nowhere to install it from but a Mac, and says so.
-    /// Checked 2026-11-13: only Glyph Jot ("Glyph by fru.dev") has one, with five valid builds.
+    /// Checked 2026-11-13: only Glyph Jot ("Glyph Labs") has one, with five valid builds.
     public let onTestFlight: Bool
     /// A layer of the family that is not an app at all: Glyph Ibis is the context sources on the
     /// web. Fru, 2026-11-15: "Why is glyph ibis not an app on mobile launcher glyph native?" It
