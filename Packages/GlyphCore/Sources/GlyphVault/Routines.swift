@@ -11,7 +11,15 @@ import Foundation
 ///     {"event":"done","id":"R1","device":"iPhone 17 Pro","ts":...}              checked off
 ///     {"event":"done","id":"R1","answer":"undo","ts":...}                       takes back that day's last check
 ///
-/// No `days` is every day; `at` (optional) is the time of day it is for. Suggestions are lines too,
+/// No `days` is every day; `at` (optional) is the time of day it is for.
+///
+/// An ongoing medicine or workout is a routine too (2026-11-25), so a habit said once ("I take vitamin D
+/// every morning now", "gym Mon Wed Fri at 6") is kept, reminded and checked in one place, whichever app
+/// heard it: `kind` med | workout | habit, `start` the first day it counts (the day it was first logged,
+/// never a guess), `end` the last (only when said, or when it was stopped), `dose` only as said:
+///
+///     {"event":"routine","id":"R4","label":"Vitamin D","kind":"med","at":"...T08:00:00-06:00","start":"2026-11-22T00:00:00-06:00",...}
+///     {"event":"routine","id":"R4","label":"Vitamin D","kind":"med","end":"2026-12-20T09:00:00-06:00",...}   stopped Suggestions are lines too,
 /// written by `glyphcore-report routines suggest` into `<month>.routines.jsonl`; the phone answers
 /// one with the same id and `answer` "add" or "dismiss", and it is never offered again:
 ///
@@ -31,6 +39,12 @@ public struct Routine: Equatable, Sendable, Identifiable {
     public var archived = false
     /// When each check-off was made, oldest first.
     public var checks: [Date] = []
+    /// med, workout or habit (nil is a habit).
+    public var kind: String?
+    /// The first day it counts and the last (nil: open), and a medicine's dose as said.
+    public var since: Date?
+    public var until: Date?
+    public var dose: String?
 
     public init(id: String, title: String, days: [Int] = [], time: Date? = nil, perDay: Int = 1, perWeek: Int? = nil) {
         self.id = id; self.title = title; self.days = days; self.time = time; self.perDay = perDay; self.perWeek = perWeek
@@ -54,9 +68,40 @@ public struct Routine: Equatable, Sendable, Identifiable {
 
     /// What `day` asks of it: perDay on its days, 1 on any day for a weekly one until the week is met, else 0.
     public func target(on day: Date, _ cal: Calendar = .current) -> Int {
-        guard on, !archived else { return 0 }
+        guard on, !archived, running(on: day, cal) else { return 0 }
         if let w = perWeek { return done(on: day, cal) > 0 || doneThisWeek(day, cal) < w ? 1 : 0 }
         return days.isEmpty || days.contains(Self.weekday(day, cal)) ? perDay : 0
+    }
+
+    /// Between its first and last day (inclusive): before it started or after it stopped nothing is due.
+    public func running(on day: Date, _ cal: Calendar = .current) -> Bool {
+        if let s = since, cal.startOfDay(for: day) < cal.startOfDay(for: s) { return false }
+        if let u = until, cal.startOfDay(for: day) > cal.startOfDay(for: u) { return false }
+        return true
+    }
+
+    /// Still going today: on, not archived, not ended before today.
+    public func active(_ now: Date = .now, _ cal: Calendar = .current) -> Bool {
+        on && !archived && (until.map { cal.startOfDay(for: $0) >= cal.startOfDay(for: now) } ?? true)
+    }
+
+    /// The days it was due from its start up to yesterday, split into taken and missed. A day counts as
+    /// taken when it was checked off here or `alsoTaken` says so (a dose logged in Glyph Well). Today is
+    /// never missed yet; days before `since` (or with no `since`, before the first check) are not counted.
+    public func record(alsoTaken: [Date] = [], now: Date = .now, _ cal: Calendar = .current) -> (taken: [Date], missed: [Date]) {
+        let takenDays = Set((checks + alsoTaken).map { cal.startOfDay(for: $0) })
+        guard let first = since ?? (checks + alsoTaken).min() else { return ([], []) }
+        var taken: [Date] = [], missed: [Date] = []
+        var d = cal.startOfDay(for: first)
+        let today = cal.startOfDay(for: now)
+        while d < today {
+            if perWeek == nil, target(on: d, cal) > 0 { if takenDays.contains(d) { taken.append(d) } else { missed.append(d) } }
+            else if perWeek != nil, takenDays.contains(d) { taken.append(d) }
+            guard let n = cal.date(byAdding: .day, value: 1, to: d) else { break }
+            d = n
+        }
+        if takenDays.contains(today) { taken.append(today) }
+        return (taken, missed)
     }
 
     /// Met for `day`: its count reached (a weekly one: checked that day).
@@ -123,7 +168,8 @@ extension TimeLog {
     /// A routine as its line (written whole on every change, so the last line is the whole truth).
     public static func routineLine(_ r: Routine, host: String, device: String? = nil, at ts: Date = .now) -> TimeEvent {
         TimeEvent("routine", at: ts, host: host, device: device, answer: r.archived ? "archive" : nil, at: r.time, label: r.title, id: r.id,
-                  days: r.days.isEmpty ? nil : r.days.sorted(), on: r.on ? nil : false, rule: r.rule)
+                  days: r.days.isEmpty ? nil : r.days.sorted(), on: r.on ? nil : false, start: r.since, end: r.until, rule: r.rule,
+                  kind: r.kind, dose: r.dose)
     }
 
     /// Every routine (archived ones too, flagged), in the order first made, with its check-offs.
@@ -139,6 +185,7 @@ extension TimeLog {
             }
             r.on = e.on != false
             r.archived = e.answer == "archive"
+            r.kind = e.kind; r.since = e.start; r.until = e.end; r.dose = e.dose
             r.checks = list[id]?.checks ?? []
             list[id] = r
         }

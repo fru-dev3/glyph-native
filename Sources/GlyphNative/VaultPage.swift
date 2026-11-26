@@ -120,8 +120,13 @@ struct VaultPage<Toggle: View>: View {
                 VStack(alignment: .leading, spacing: 14) { folderCard; if hasAddress { computerCard } }   // one column, full width, at every size
                 heading("Devices")
                 devicesCard
-                Button("Set up again") { SetupFlow.shared.restart() }.buttonStyle(.plain).font(.system(size: 12.5)).foregroundStyle(Token.quiet)
-                    .padding(.top, 4).testFrame("vault.again")
+                // Only once there is something to set up again. With no folder chosen the page
+                // already offers "Create Glyph Vault", and "again" named a setup that never ran
+                // (review, 2026-11-20).
+                if model.path != nil {
+                    Button("Set up again") { SetupFlow.shared.restart() }.buttonStyle(.plain).font(.system(size: 12.5)).foregroundStyle(Token.quiet)
+                        .padding(.top, 4).testFrame("vault.again")
+                }
             }
             .padding(.horizontal, 28).padding(.top, 22).padding(.bottom, 24)
         }
@@ -274,8 +279,11 @@ struct VaultPage<Toggle: View>: View {
         return ZStack {
             LinearGradient(colors: [Color(red: 0.055, green: 0.14, blue: 0.07), Color(red: 0.07, green: 0.227, blue: 0.1)], startPoint: .topLeading, endPoint: .bottomTrailing)
             GeometryReader { g in
-                let c = CGPoint(x: g.size.width / 2, y: g.size.height / 2)
                 let rx = g.size.width * 0.38, ry = g.size.height * 0.30
+                // One device sits to the vault's left, so the pair is centred as a pair: with the
+                // vault in the middle the drawing filled the left half of the stage and left the
+                // right half bare (review, 2026-11-20).
+                let c = CGPoint(x: g.size.width / 2 + (ds.count == 1 ? rx / 2 : 0), y: g.size.height / 2)
                 ForEach(Array(ds.enumerated()), id: \.offset) { i, d in
                     let n = ds.count
                     // one: left; two: left and right; more: even steps from the left, going over the top.

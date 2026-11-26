@@ -1,0 +1,46 @@
+# The A2UI demo: GlyphCore's renderer drawing its five fixtures (Sources/GlyphCapture/A2UIFixtures.swift),
+# on the iPhone inside the family's chat and on the Mac on its own. Not an app anyone installs.
+#   xcodegen generate --spec project.yml && open A2UIDemo.xcodeproj
+#   scripts/a2ui-shots.sh <out dir>   pictures of all five, dark, iPhone simulator and Mac
+name: A2UIDemo
+options:
+  bundleIdPrefix: dev.fru
+  deploymentTarget:
+    iOS: "26.0"
+    macOS: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    GENERATE_INFOPLIST_FILE: YES
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+packages:
+  GlyphCore:
+    path: ../..
+targets:
+  A2UIDemoPhone:
+    type: application
+    platform: iOS
+    sources: [A2UIDemoApp.swift]
+    dependencies:
+      - package: GlyphCore
+        product: GlyphCapture
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.fru.a2ui-demo
+        TARGETED_DEVICE_FAMILY: "1"
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIUserInterfaceStyle: Dark
+  A2UIDemoMac:
+    type: application
+    platform: macOS
+    sources: [A2UIDemoApp.swift]
+    dependencies:
+      - package: GlyphCore
+        product: GlyphCapture
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.fru.a2ui-demo.mac
+        ENABLE_HARDENED_RUNTIME: NO

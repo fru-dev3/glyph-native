@@ -49,12 +49,14 @@ public struct GlyphDrawer: View {
     let here: String
     /// A line at the foot: the version, whether the hub was reached, whatever the app keeps there.
     let foot: AnyView?
+    /// The tags, under the places: the same section in every app's drawer (`GlyphDrawerTags`).
+    let tags: GlyphDrawerTags?
     let choose: (String) -> Void
 
     public init(name: String, mark: String, tint: Color, sections: [Section], here: String,
-                foot: AnyView? = nil, choose: @escaping (String) -> Void) {
+                tags: GlyphDrawerTags? = nil, foot: AnyView? = nil, choose: @escaping (String) -> Void) {
         self.name = name; self.mark = mark; self.tint = tint; self.sections = sections
-        self.here = here; self.foot = foot; self.choose = choose
+        self.here = here; self.tags = tags; self.foot = foot; self.choose = choose
     }
 
     public var body: some View {
@@ -68,12 +70,15 @@ public struct GlyphDrawer: View {
             }
             .padding(.horizontal, 4)
 
-            if let ways = sections.first(where: { $0.title == nil }) {
-                VStack(spacing: 4) { ForEach(ways.rows) { tile($0) } }
-            }
-
+            // Everything between the name and the foot scrolls, the places included. They stood
+            // outside the scroll until 2026-11-22, and once an app folded more rows into them (a
+            // More opened in Omega) they outgrew the panel and pushed the name up into the clock.
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    if let ways = sections.first(where: { $0.title == nil }) {
+                        VStack(spacing: 4) { ForEach(ways.rows) { tile($0) } }
+                            .padding(.bottom, 6)
+                    }
                     ForEach(sections.filter { $0.title != nil }) { s in
                         VStack(alignment: .leading, spacing: 9) {
                             Text((s.title ?? "").uppercased())
@@ -83,6 +88,7 @@ public struct GlyphDrawer: View {
                             VStack(spacing: 2) { ForEach(s.rows) { quiet($0) } }
                         }
                     }
+                    if let tags { tags }
                 }
             }
             .scrollIndicators(.hidden)
@@ -133,6 +139,8 @@ public struct GlyphDrawer: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("drawer.\(r.id)")
+        // Which place you are in was said only by a darker row: nothing a screen reader, or a check, could hear.
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 
     /// Everything else: a quieter row, the same tap, no tile.
@@ -154,6 +162,173 @@ public struct GlyphDrawer: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("drawer.\(r.id)")
+        // Which place you are in was said only by a darker row: nothing a screen reader, or a check, could hear.
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+}
+
+/// The tags in the drawer, the same in every app (Fru, 2026-11-23, of the sidebars: "I should see
+/// the chat, the app, and then the tags visible, showing all on the side, expanded. And then I can
+/// choose to collapse it or not... in every single app"). Every tag this app holds, from the
+/// register (`GlyphTags.forApp`), open by default; the heading folds it away and the choice is kept
+/// on this phone, per app. A tag opens that tag's page in the app, where you chat with it and act on
+/// it (a tag is a domain with its own context). The register is managed in Glyph CRM, so every
+/// other app ends the list with Manage tags, which opens CRM's tags.
+///
+/// Its own view so a drawer an app still draws itself (Jot, Well, Wealth, Time, CRM) embeds the
+/// same section `GlyphDrawer` draws, never a copy.
+///
+/// Accessibility identifiers: `drawer.tagsection` (the heading), `drawer.tag.<slug>`, `drawer.tagsection.manage`. Never `drawer.tags`: that is every app's Tags place row.
+public struct GlyphDrawerTags: View {
+    let app: String
+    let tint: Color
+    let here: String?
+    let open: (GlyphTag) -> Void
+    /// How many things carry each tag, by slug, drawn at the row's end. Empty draws none.
+    let counts: [String: Int]
+    /// The app's own order of its tags, by name (Glyph Jot's Edit Order); nil is the register's.
+    let order: [String]?
+    /// What a long press on a tag offers (Glyph Jot's rename, describe, delete); nil offers nothing.
+    let menu: ((GlyphTag) -> AnyView)?
+    /// One more row under the tags, for an app's own tag action (Glyph Jot's Edit Order).
+    let extra: AnyView?
+    @ObservedObject private var register = GlyphTags.shared
+    @AppStorage("glyph.drawer.tags.open") private var expanded = true
+    @Environment(\.openURL) private var openURL
+
+    /// - app: the family id ("well"), which picks the subset. - here: the tag on screen, if any.
+    /// - open: shows that tag's page (its `id` is the slug, its `name` the register's spelling).
+    public init(app: String, tint: Color, here: String? = nil, counts: [String: Int] = [:], order: [String]? = nil,
+                menu: ((GlyphTag) -> AnyView)? = nil, extra: AnyView? = nil, open: @escaping (GlyphTag) -> Void) {
+        self.app = app; self.tint = tint; self.here = here; self.open = open
+        self.counts = counts; self.order = order; self.menu = menu; self.extra = extra
+    }
+
+    /// The tags in the order shown: the app's own order first, then any the register has that it lacks.
+    private var shown: [GlyphTag] {
+        let mine = register.forApp(app)
+        guard let order else { return mine }
+        let byName = Dictionary(mine.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let first = order.compactMap { byName[GlyphTag.slug($0)] ?? GlyphTag(name: $0) }
+        let seen = Set(first.map(\.id))
+        return first + mine.filter { !seen.contains($0.id) }
+    }
+
+    public var body: some View {
+        let tags = shown
+        VStack(alignment: .leading, spacing: 9) {
+            Button { withAnimation(.snappy) { expanded.toggle() } } label: {
+                HStack(spacing: 6) {
+                    Text("TAGS").font(.system(size: 11.5, weight: .semibold)).tracking(0.5)
+                    Text("\(tags.count)").font(.system(size: 11.5)).monospacedDigit()
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold))
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                }
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 8).frame(height: 28).contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(expanded ? "Tags, shown. Hide them" : "Tags, hidden. Show them")
+            .accessibilityIdentifier("drawer.tagsection")
+            if expanded {
+                VStack(spacing: 2) {
+                    if tags.isEmpty {
+                        Text("No tags yet").font(.system(size: 15)).foregroundStyle(.tertiary)
+                            .padding(.horizontal, 8).frame(height: 38)
+                    }
+                    ForEach(tags) { t in
+                        if let menu { row(t).contextMenu { menu(t) } } else { row(t) }
+                    }
+                    if let extra { extra }
+                    if app != "crm" {
+                        Button { if let u = URL(string: "glyph-crm://tags") { openURL(u) } } label: {
+                            HStack(spacing: 11) {
+                                Image(systemName: "slider.horizontal.3").font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.tertiary).frame(width: 22)
+                                Text("Manage tags").font(.system(size: 15)).foregroundStyle(.secondary)
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, 8).frame(height: 38).contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Opens Glyph CRM, where the tags are kept")
+                        .accessibilityIdentifier("drawer.tagsection.manage")
+                    }
+                }
+            }
+        }
+    }
+
+    private func row(_ t: GlyphTag) -> some View {
+        let on = here.map { GlyphTag.slug($0) == t.id } ?? false
+        return Button { open(t) } label: {
+            HStack(spacing: 11) {
+                Text("#").font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(t.color ?? tint).frame(width: 22)
+                Text(GlyphTags.display(t.name)).font(.system(size: 15, weight: on ? .semibold : .regular))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                if let n = counts[t.id] { Text("\(n)").font(.system(size: 13)).foregroundStyle(.tertiary).monospacedDigit() }
+            }
+            .padding(.horizontal, 8).frame(height: 38)
+            .background(on ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear),
+                        in: .rect(cornerRadius: 10, style: .continuous))
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(GlyphTags.display(t.name))
+        .accessibilityIdentifier("drawer.tag.\(t.id)")
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+}
+
+/// Words said on a tag's page, for the app's chat to say with that tag.
+public struct GlyphAsk: Equatable, Sendable {
+    public let id = UUID()
+    public let words: String
+    /// The tag, by slug.
+    public let tag: String?
+    public init(words: String, tag: String?) { self.words = words; self.tag = tag }
+}
+
+public struct GlyphChatAskKey: EnvironmentKey {
+    // Made and read on the main actor, as every view body is; see GlyphDrawerOpenKey.
+    nonisolated(unsafe) public static let defaultValue: Binding<GlyphAsk?>? = nil
+}
+
+public struct GlyphAskInChatKey: EnvironmentKey {
+    nonisolated(unsafe) public static let defaultValue: ((GlyphAsk) -> Void)? = nil
+}
+
+public extension EnvironmentValues {
+    /// The words a tag's page sent, which the app's `GlyphChat` says and clears. Set by the shell.
+    var glyphChatAsk: Binding<GlyphAsk?>? {
+        get { self[GlyphChatAskKey.self] }
+        set { self[GlyphChatAskKey.self] = newValue }
+    }
+    /// What a tag's page does with words: the shell stores them in `glyphChatAsk` and shows its chat.
+    var glyphAskInChat: ((GlyphAsk) -> Void)? {
+        get { self[GlyphAskInChatKey.self] }
+        set { self[GlyphAskInChatKey.self] = newValue }
+    }
+}
+
+/// The composer at the foot of a tag's page in an app whose talking is its chat (Life, Glyph X,
+/// Connect, Omega, Native, Bot): the family's composer, and what is said goes to the app's chat as
+/// the next turn with this tag on it, so the hub reads it in the tag's context and files it there.
+/// Fru, 2026-11-23: "when I click on the tag, I can just chat or interact with that tag." An app
+/// whose tag pages already capture under the tag (Jot, Well, Wealth, Time) keeps its own.
+public struct GlyphTagComposer: View {
+    let tag: String
+    let tint: Color
+    @Environment(\.glyphAskInChat) private var askInChat
+    /// - tag: the tag's slug or name.
+    public init(tag: String, tint: Color) { self.tag = tag; self.tint = tint }
+    public var body: some View {
+        GlyphComposer(tint: tint, placeholder: "Ask or add to #\(GlyphTags.display(tag))") { words, _ in
+            askInChat?(GlyphAsk(words: words, tag: GlyphTag.slug(tag)))
+        }
     }
 }
 

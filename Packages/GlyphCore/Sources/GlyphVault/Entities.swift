@@ -166,3 +166,25 @@ func mentions(_ hay: String, _ needle: String) -> Bool {
     }
     return false
 }
+
+/// Where the tags live since 2026-11-22: one folder per tag in `data/tags/`, holding its page
+/// (`entity.md`) and what was its domain (memory/, source/, manifest.json). The old `data/domains` and
+/// `data/entities/tags` are links to it, so a walk that skips links reports `data/tags/...`. The hub's
+/// `moved()` is its twin.
+public enum TagFolders {
+    /// The folder names under `data/` that hold tag folders: the new one and the old name, a link to it.
+    public static let names: Set<String> = ["tags", "domains"]
+
+    /// The vault-relative folder to write in: "data/tags", or `old` while a vault has not moved yet.
+    public static func root(_ vault: URL, old: String = "data/domains") -> String {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: vault.appending(path: "data/tags").path) { return "data/tags" }
+        return [old, "data/domains"].contains { fm.fileExists(atPath: vault.appending(path: $0).path) } ? old : "data/tags"
+    }
+
+    /// The tag a vault-relative path sits in: "data/tags/health/x.md" or "data/domains/health/x.md" -> "health".
+    public static func tag(of rel: String) -> String? {
+        let p = rel.split(separator: "/", omittingEmptySubsequences: false)
+        return p.count > 2 && p[0] == "data" && names.contains(String(p[1])) && !p[2].isEmpty ? String(p[2]) : nil
+    }
+}

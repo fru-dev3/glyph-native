@@ -21,6 +21,8 @@ import Foundation
 /// Any other repeat is a `rule` ("d2" every other day, "h2" every 2 hours, "m1.1" the first Monday
 /// of each month, "m-1.5" the last Friday); `end` is the last moment it may go off and `start` the
 /// day it was said to begin ("until Nov 27", "starting next Monday").
+/// Time told after the fact is one line, logged (project, start, end, label: when as they said
+/// it): a whole session, kept apart from any timer open on that device.
 /// Fixing the record is a line too, never a rewrite: edit (id, and any of project, start, end)
 /// changes one session, delete takes it out, undelete brings it back; any device may write them,
 /// naming the session by its `id`. rename (project: the old name, label: the new one) renames a
@@ -34,7 +36,7 @@ public struct TimeEvent: Codable, Equatable, Sendable {
     public var host: String
     public var device: String?
     public var project: String?
-    /// Where the project name came from: named, repo (a terminal or editor window), app.
+    /// Where the project name came from: named, repo (a terminal or editor window), app; said (told after the fact).
     public var source: String?
     /// The front app's bundle id when the timer started. Never a window title or a URL.
     public var app: String?
@@ -60,19 +62,29 @@ public struct TimeEvent: Codable, Equatable, Sendable {
     public var end: Date?
     /// An alarm's or reminder's repeat other than weekly `days`: "d2", "h2", "m1.1".
     public var rule: String?
+    /// Where it was saved (`Where`): the place's name, and its coordinates to 6 decimals. None: no place.
+    public var place: String?
+    public var lat: Double?
+    public var lon: Double?
+    /// A routine's sort: med, workout or habit (none is a habit); and a medicine's dose, only as said.
+    public var kind: String?
+    public var dose: String?
 
     public init(_ event: String, at ts: Date = .now, host: String, device: String? = nil, project: String? = nil,
                 source: String? = nil, app: String? = nil, reason: String? = nil, minutes: Int? = nil,
                 countdown: Int? = nil, answer: String? = nil,
                 at: Date? = nil, label: String? = nil, id: String? = nil,
                 days: [Int]? = nil, sound: String? = nil, snooze: Bool? = nil, on: Bool? = nil,
-                start: Date? = nil, end: Date? = nil, rule: String? = nil) {
+                start: Date? = nil, end: Date? = nil, rule: String? = nil, where w: Where? = nil,
+                kind: String? = nil, dose: String? = nil) {
         self.ts = ts; self.event = event; self.host = host; self.device = device; self.project = project
         self.source = source; self.app = app; self.reason = reason; self.minutes = minutes
         self.countdown = countdown; self.answer = answer
         self.at = at; self.label = label; self.id = id
         self.days = days; self.sound = sound; self.snooze = snooze; self.on = on
         self.start = start; self.end = end; self.rule = rule
+        place = w?.place; lat = w?.lat; lon = w?.lon
+        self.kind = kind; self.dose = dose
     }
 }
 
@@ -275,6 +287,14 @@ public enum TimeLog {
                 }
             case "stop":
                 close(e.host, at: e.ts)
+            case "logged":
+                // Hours told after the fact ("I spent two hours on tax prep"): a whole session in one
+                // line, so it never closes, or is closed by, a timer running on the same device.
+                guard let s = e.start, let end = e.end, end > s else { break }
+                var t = TimeSession(id: "\(e.host) \(stamp.string(from: s))", host: e.host, device: e.device,
+                                    project: e.project, source: "said", start: s)
+                t.end = end
+                done.append(t)
             case "nudge":
                 open[e.host]?.nudges += 1
             default:

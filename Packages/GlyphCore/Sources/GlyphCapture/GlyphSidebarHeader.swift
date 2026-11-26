@@ -53,7 +53,7 @@ public struct GlyphSidebarHeader: View {
             }
             .buttonStyle(.plain)
             .help("Settings")
-            .accessibilityIdentifier("settings")
+            .glyphProbe("settings")
         }
         .padding(.horizontal, 14).padding(.top, 4).padding(.bottom, 8)
     }

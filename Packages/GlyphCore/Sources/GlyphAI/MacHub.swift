@@ -11,10 +11,12 @@ import GlyphVault
 
 /// The hub's routes the agents use, done on a vault folder: `PUT memo/<stem>` and `PUT memo-undo/<stem>` (Jot),
 /// `PUT well/<file>` (Well), `PUT wealth/<file>` (Wealth), `GET` and `PUT crm/file?path=`, `GET crm/names`, `PUT crm/move` (CRM), `GET omega` and
-/// `PUT omega/<path>` (Omega), `GET life/context` and `PUT life/<file>` (Life). Another route answers 501: that tool needs the hub.
+/// `PUT omega/<path>` (Omega), `GET life/context` and `PUT life/<file>` (Life), `PUT time/<file>` (Time's sessions). Another route answers 501: that tool needs the hub.
 struct MacHub {
     let vault: URL
-    var domains: URL { vault.appending(path: "data/domains") }
+    /// The tag folders (data/tags since 2026-11-22; data/domains in a vault not moved yet).
+    var tagsRel: String { TagFolders.root(vault) }
+    var domains: URL { vault.appending(path: tagsRel) }
 
     func handle(_ method: String, _ path: String, query: [String: String], body: Data?, headers: [String: String] = [:]) -> (Int, Data)? {
         switch (method, path) {
@@ -25,6 +27,15 @@ struct MacHub {
             return (200, (try? JSONSerialization.data(withJSONObject: lifeContext(), options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data())
         case ("PUT", _) where path.hasPrefix("life/"):
             return (lines(app: "life", name: String(path.dropFirst(5)), body: body ?? Data()), Data())
+        case ("GET", "time"):
+            // Every device's Time lines of the last 12 months, as the hub's GET /time serves them.
+            let dir = vault.appending(path: "data/apps/time/sessions")
+            let names = ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []).filter { $0.hasSuffix(".jsonl") }.sorted()
+            let keep = Set(names.map { String($0.prefix(7)) }.sorted().suffix(12))
+            return (200, names.filter { keep.contains(String($0.prefix(7))) }.compactMap { FileManager.default.contents(atPath: dir.appending(path: $0).path) }
+                .reduce(into: Data()) { $0.append($1); if $1.last != 0x0A { $0.append(0x0A) } })
+        case ("PUT", _) where path.hasPrefix("time/"):
+            return (lines(String(path.dropFirst(5)), body ?? Data(), into: "data/apps/time/sessions"), Data())
         case ("PUT", _) where path.hasPrefix("travel/"):
             return (lines(String(path.dropFirst(7)), body ?? Data(), into: "data/apps/travel/trips"), Data())
         case ("PUT", _) where path.hasPrefix("memo-undo/"):
@@ -159,7 +170,7 @@ struct MacHub {
         } catch { return false }
     }
 
-    // MARK: Jot: the hub's save() for an agent's memo (no photo, place or coords): the note in notes, a copy in
+    // MARK: Jot: the hub's save() for an agent's memo (no photo): the note in notes, a copy in
     // each existing domain its tags name, and a Task note's first line on that domain's task list.
 
     func memo(_ stem: String, _ body: Data) -> Int {
@@ -170,6 +181,11 @@ struct MacHub {
         let kind = ["voice", "typed", "photo"].contains(o["kind"] as? String ?? "") ? o["kind"] as! String : "voice"
         let text = o["text"] as? String ?? ""
         let device = String(((o["device"] as? String) ?? "unknown").filter { $0.isLetter || $0.isNumber || " _,.()+-".contains($0) }.prefix(60))
+        // Where it was saved, as the hub writes it: place quoted, lat and lon to 6 decimals, in range.
+        let w = Where(o).flatMap { abs($0.lat) <= 90 && abs($0.lon) <= 180 ? $0 : nil }
+        let place = w?.place.map { String($0.split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(120)) }
+        let at = (place.map { "place: \(Self.quote($0))\n" } ?? "")
+            + (w.map { String(format: "lat: %.6f\nlon: %.6f\n", $0.lat, $0.lon) } ?? "")
         let existing = Set(((try? FileManager.default.contentsOfDirectory(atPath: domains.path)) ?? [])
             .filter { !$0.hasPrefix("_") && !$0.hasPrefix(".") && isDir(domains.appending(path: $0)) })
         let routed = Set((o["domains"] as? [String]) ?? []).intersection(existing).subtracting(["notes"])
@@ -177,17 +193,18 @@ struct MacHub {
         func markdown(copy: Bool) -> String {
             let date = stem.prefix(10) + "T" + stem.dropFirst(11).replacingOccurrences(of: "-", with: ":")
             let list = "[" + tags.map(Self.quote).joined(separator: ", ") + "]"   // Python's json.dumps
-            return "---\ndate: \(date)\ntags: \(list)\nkind: \(kind)\ndevice: \(device.isEmpty ? "unknown" : device)\nsource: jot\n"
+            return "---\ndate: \(date)\ntags: \(list)\nkind: \(kind)\ndevice: \(device.isEmpty ? "unknown" : device)\n\(at)source: jot\n"
                 + (copy ? "original: notes/source/jot/\(stem).md\n" : "") + "---\n\n"
                 + text.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
         }
-        guard write("data/domains/notes/source/jot/\(stem).md", markdown(copy: false)) else { return 500 }
-        for d in routed.sorted() where !write("data/domains/\(d)/source/jot/\(stem).md", markdown(copy: true)) { return 500 }
+        let dir = tagsRel
+        guard write("\(dir)/notes/source/jot/\(stem).md", markdown(copy: false)) else { return 500 }
+        for d in routed.sorted() where !write("\(dir)/\(d)/source/jot/\(stem).md", markdown(copy: true)) { return 500 }
 
         let first = text.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: "\n").first.map {
             String($0.split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(240)) } ?? ""
         if tags.contains(where: { $0.lowercased() == "task" }), !first.isEmpty {
-            let rel = "data/domains/\(routed.sorted().first ?? "notes")/memory/tasks.md", mark = "[src jot \(stem)]"
+            let rel = "\(dir)/\(routed.sorted().first ?? "notes")/memory/tasks.md", mark = "[src jot \(stem)]"
             let old = read(rel) ?? "# Tasks\n"
             if !old.contains(mark), !write(rel, old.replacing(/\n+$/, with: "") + "\n- [ ] \(first) +\(stem.prefix(10)) \(mark)\n") { return 500 }
         }
@@ -332,13 +349,13 @@ struct MacHub {
         return ["files": files, "labels": labels, "shas": shas]
     }
 
-    nonisolated(unsafe) static let omegaWritable = /(build\/compass\.md|data\/domains\/[a-z0-9][a-z0-9-]{0,60}\/(source\/goals\.md|memory\/tasks\.md|_tasks\.md)|data\/apps\/omega\/reviews\/\d{4}-\d{2}\.[a-z0-9-]{1,60}\.jsonl|data\/apps\/omega\/captures\/\d{4}-\d{2}-\d{2}-\d{4,6}(-[a-z0-9-]{1,40})?\.md)/
+    nonisolated(unsafe) static let omegaWritable = /(build\/compass\.md|data\/(?:domains|tags)\/[a-z0-9][a-z0-9-]{0,60}\/(source\/goals\.md|memory\/tasks\.md|_tasks\.md)|data\/apps\/omega\/reviews\/\d{4}-\d{2}\.[a-z0-9-]{1,60}\.jsonl|data\/apps\/omega\/captures\/\d{4}-\d{2}-\d{2}-\d{4,6}(-[a-z0-9-]{1,40})?\.md)/
 
     /// 204, 400 (not one of Omega's files) or 409 (changed since). The Compass keeps its earlier text in
     /// build/compass.versions/<UTC time>.md, as the hub and the engine do.
     func omegaWrite(_ rel: String, _ data: Data, base: String) -> Int {
         guard rel.wholeMatch(of: Self.omegaWritable) != nil, !rel.contains(".."), let text = String(data: data, encoding: .utf8) else { return 400 }
-        if let d = rel.wholeMatch(of: /data\/domains\/([^\/]+)\/.*/)?.1, !omegaDomains().contains(String(d)) { return 400 }
+        if let d = TagFolders.tag(of: rel), !omegaDomains().contains(d) { return 400 }
         let url = vault.appending(path: rel)
         let now = try? Data(contentsOf: url)
         guard (now.map { SHA256.hash(data: $0).map { String(format: "%02x", $0) }.joined() } ?? "none") == base else { return 409 }
@@ -362,12 +379,15 @@ struct MacHub {
         // can offer the tags that exist instead of keeping a list of its own. A kind missing from
         // this list is a kind no app can ever see.
         for (d, prefix) in [("people", "person"), ("places", "place"), ("orgs", "org"), ("things", "thing"), ("tags", "tag")] {
-            let dir = vault.appending(path: "data/entities/\(d)")
+            // Tags are listed from data/tags (where they live since 2026-11-22) and named by the old path,
+            // a link to it, which every app's names reader parses (data/entities/<kind>/<slug>/entity.md).
+            let dir = vault.appending(path: d == "tags" ? TagFolders.root(vault, old: "data/entities/tags") : "data/entities/\(d)")
             let slugs = ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? [])
                 .filter { !$0.hasPrefix("_") && !$0.hasPrefix(".") && isDir(dir.appending(path: $0)) }.sorted()
             for slug in slugs {
                 let rel = "data/entities/\(d)/\(slug)/entity.md"
-                let text = read(rel) ?? ""
+                let text = (try? String(contentsOf: dir.appending(path: "\(slug)/entity.md"), encoding: .utf8)) ?? ""
+                if d == "tags", text.isEmpty { continue }   // a tag's folder with no page yet is no tag
                 var front: [String: String] = [:]
                 if text.hasPrefix("---\n") {
                     let body = text.dropFirst(4)
@@ -397,7 +417,7 @@ struct MacHub {
     static func movable(_ src: String, _ dst: String) -> Bool {
         guard safe(src), safe(dst) else { return false }
         let f = src.split(separator: "/", omittingEmptySubsequences: false).map(String.init), t = dst.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
-        if f.count == 6, f[1] == "domains", f[3] == "source", f[4] == "crm", f[5].hasSuffix(".md"),
+        if f.count == 6, TagFolders.names.contains(f[1]), f[3] == "source", f[4] == "crm", f[5].hasSuffix(".md"),
            t.count == 5, t[1] == "apps", t[2] == "crm", t[3] == "undone", t[4] == f[5] { return true }
         if f.count == 4, f[1] == "entities", crmKinds.contains(f[2]),
            t.count == 6, t[1] == "apps", t[2] == "crm", t[3] == "undone", t[4] == f[2] { return true }
@@ -434,8 +454,8 @@ struct MacHub {
         let p = rel.split(separator: "/").map(String.init)
         switch (p.count, p[1]) {
         case (5, "entities"): return ["people", "places", "orgs", "things", "events"].contains(p[2]) && p[4] == "entity.md"
-        case (5, "domains"): return !p[2].hasPrefix("_") && p[3] == "memory" && p[4] == "tasks.md"
-        case (6, "domains"): return !p[2].hasPrefix("_") && p[3] == "source" && p[4] == "crm" && p[5].hasSuffix(".md")
+        case (5, "domains"), (5, "tags"): return !p[2].hasPrefix("_") && p[3] == "memory" && p[4] == "tasks.md"
+        case (6, "domains"), (6, "tags"): return !p[2].hasPrefix("_") && p[3] == "source" && p[4] == "crm" && p[5].hasSuffix(".md")
         case (4, "apps"): return p[2] == "crm" && (["settings.json", "synthesis.json"].contains(p[3]) || p[3].hasPrefix("import-"))
         case (5, "apps"): return p[2] == "crm" && ((p[3] == "proposals" && p[4].hasSuffix(".jsonl")) || (p[3] == "merges" && p[4].hasSuffix(".json")))
         default: return rel == "data/entities/merges.json"

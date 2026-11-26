@@ -25,7 +25,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "GlyphVault"),
-        .target(name: "GlyphCapture", dependencies: ["GlyphVault", "GlyphAI", .product(name: "FluidAudio", package: "FluidAudio")]),
+        .target(name: "GlyphCapture", dependencies: ["GlyphVault", "GlyphAI", .product(name: "FluidAudio", package: "FluidAudio")], exclude: ["A2UI.md"]),
         .target(name: "GlyphAI", dependencies: ["GlyphVault"]),
         .target(name: "GlyphCore", dependencies: ["GlyphVault", "GlyphCapture", "GlyphAI"]),
         .executableTarget(name: "glyphcore-report", dependencies: ["GlyphVault", "GlyphAI"]),

@@ -106,6 +106,16 @@ public enum Release {
         return ""
     }
 
+    /// The update-check count (Fru, 2026-11-25): one GET per app carrying only its id and version, so
+    /// fru.dev can count installs per day without knowing anything about the person. Nil for a version
+    /// that is not plain numbers, which the endpoint would refuse anyway.
+    public static func pingURL(app: String, version: String) -> URL? {
+        guard numbers(version) != nil else { return nil }
+        var c = URLComponents(string: "https://fru.dev/api/v")!
+        c.queryItems = [URLQueryItem(name: "app", value: app), URLQueryItem(name: "v", value: version)]
+        return c.url
+    }
+
     /// Glyph Native's own download, for the one app this app cannot install the usual way: itself.
     /// A running app cannot be copied over, so the update is fetched and opened, and the person
     /// drags it across as they did the first time (Fru, 2026-11-15: "make the updates work").
@@ -237,13 +247,14 @@ public enum Uninstall: Equatable, Sendable {
 
 public enum HeroState: Equatable, Sendable {
     case checking, offline
-    case install(missing: Int, total: Int), updates(Int), current(Int)
+    /// `stale` rides along so the small line can say what is waiting behind the installs.
+    case install(missing: Int, total: Int, stale: Int = 0), updates(Int), current(Int)
 
     /// From row state only: `looked` is true once GitHub was asked, `anyLatest` once any app got an answer.
     public static func from(looked: Bool, anyLatest: Bool, total: Int, missing: Int, stale: Int) -> HeroState {
         if !looked { return .checking }
         if !anyLatest { return .offline }
-        if missing > 0 { return .install(missing: missing, total: total) }
+        if missing > 0 { return .install(missing: missing, total: total, stale: stale) }
         if stale > 0 { return .updates(stale) }
         return .current(total)
     }
@@ -255,7 +266,12 @@ public enum HeroState: Equatable, Sendable {
         switch self {
         case .checking: "Checking GitHub"
         case .offline: "Can't reach GitHub"
-        case .install(let m, _): "\(m) to install"
+        // Never the headline's own count again: the hero read "7 TO INSTALL" over "7 more to
+        // install." (review, 2026-11-20). With some of the family here, the small line says
+        // what is here, and what is waiting for an update, which nothing said while anything
+        // was missing.
+        case .install(let m, let t, let s):
+            m == t ? "\(m) to install" : s > 0 ? "\(t - m) installed · \(s) to update" : "\(t - m) of \(t) installed"
         case .updates(let n): "\(n) to update"
         case .current: "Up to date"
         }
@@ -264,7 +280,7 @@ public enum HeroState: Equatable, Sendable {
         switch self {
         case .checking: "Looking for the latest versions."
         case .offline: "Showing what is on this Mac."
-        case .install(let m, let t): m == t ? "One install. Every app." : "\(m) more to install."
+        case .install(let m, let t, _): m == t ? "One install. Every app." : "\(m) more to install."
         case .updates(let n): n == 1 ? "1 update ready." : "\(n) updates ready."
         // The calm state says what the family is, not that nothing happened: the fact moved to the small line above.
         case .current: "One life. One vault."

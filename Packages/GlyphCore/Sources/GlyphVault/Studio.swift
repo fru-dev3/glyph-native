@@ -180,9 +180,10 @@ public struct StudioDirectory: Sendable, Equatable {
         slug.split(separator: "-").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
     }
 
-    /// Folder names that are objects (no `_` or `.` in front).
+    /// Folder names that are objects (no `_` or `.` in front). A folder that is a link (`data/domains` and
+    /// `data/entities/tags` since 2026-11-22) is read where it points: a URL listing of a link is empty.
     static func folders(_ dir: URL) -> [String] {
-        let items = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.isDirectoryKey])) ?? []
+        let items = (try? FileManager.default.contentsOfDirectory(at: dir.resolvingSymlinksInPath(), includingPropertiesForKeys: [.isDirectoryKey])) ?? []
         return items.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
             .map(\.lastPathComponent).filter { !$0.hasPrefix("_") && !$0.hasPrefix(".") }.sorted()
     }
@@ -194,7 +195,7 @@ public struct StudioDirectory: Sendable, Equatable {
         for slug in folders(dir) {
             if let text = try? String(contentsOf: dir.appending(path: slug).appending(path: "entity.md"), encoding: .utf8) { out.append((slug, text)) }
         }
-        let flat = ((try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
+        let flat = ((try? fm.contentsOfDirectory(at: dir.resolvingSymlinksInPath(), includingPropertiesForKeys: nil)) ?? [])
             .filter { $0.pathExtension == "md" && !$0.lastPathComponent.hasPrefix("_") && !$0.lastPathComponent.hasPrefix(".") }
         for f in flat {
             let slug = f.deletingPathExtension().lastPathComponent

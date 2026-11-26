@@ -47,7 +47,8 @@ public struct GlyphTagPill: View {
                 Text("#").font(.system(size: 15.5, weight: .bold))
                     .foregroundStyle(on ? Color.white.opacity(0.9) : GlyphTagHash.color(name))
             }
-            Text(name).lineLimit(1)
+            // "All" and "See all 23" are not tags and are written as given.
+            Text(all ? name : GlyphTags.display(name)).lineLimit(1)
             if count > 0 {
                 Text("\(count)").monospacedDigit()
                     .foregroundStyle(on ? Color.white.opacity(0.75) : Self.quiet)

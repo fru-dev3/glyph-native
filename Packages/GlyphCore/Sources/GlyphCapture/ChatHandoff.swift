@@ -21,8 +21,13 @@ extension ChatModel {
     /// back, or what was done. Another app's job (a handoff) says what it is doing under that app's face, is done by
     /// that app's agent, and for Time waits for Time's own answer: "Waiting for Time", then the confirmed card
     /// ("Alarm set · 3:32 PM · Take a walk", a tap opens Time). Never a done card before the app confirms. The
-    /// hub's optional proactive offer follows last.
+    /// hub's optional proactive offer follows last. A screen the hub sent with it (`plan.a2ui`, only when the app
+    /// asked with `supportedCatalogIds`) rides on the first line, drawn under it by GlyphChat.
     public static func lines(for plan: ChatPlan, hub: Hub, app: String) async -> [ChatEntry] {
+        await spoken(plan, hub: hub, app: app).drawing(plan)
+    }
+
+    static func spoken(_ plan: ChatPlan, hub: Hub, app: String) async -> [ChatEntry] {
         let nothing = [ChatEntry(text: plan.reply.isEmpty ? "Nothing to do" : plan.reply)]
         switch plan.kind {
         // The engine that answered rides with the line, so the chat can say so underneath it.
@@ -85,6 +90,27 @@ extension ChatModel {
             return [ChatEntry(text: opened ? "Time hasn't answered, open it to check" : "Glyph Time isn't on this iPhone",
                               mood: .sad, link: opened ? timeLink : nil, agent: "time")]
         }
+    }
+}
+extension Hub {
+    /// What a chat turn offers to draw (`supportedCatalogIds`): the Glyph catalog, unless this surface is
+    /// answered by an open model on the vault's computer. Measured 2026-11-22 in Glyph Wealth: qwen3:8b, offered
+    /// screens, sent a bare createSurface in place of its plan in 12 of 12 turns. Settings not known yet ask for
+    /// words only, so a turn is never a half-drawn one.
+    public func screens(for surface: String) async -> [String] {
+        let s = AnswerSettings.stale ? (await fetchAnswers() ?? AnswerSettings.cached) : AnswerSettings.cached
+        return s.map { $0.choice(for: surface).contains("ollama") } == false ? [A2UI.catalogId] : []
+    }
+}
+
+extension Array where Element == ChatEntry {
+    /// The hub's screen (A2UI) under the turn's first line, the way every app's chat shows it. A screen with
+    /// nothing drawable left in it (no root) is dropped, so the turn reads as plain words.
+    @MainActor public func drawing(_ plan: ChatPlan) -> [ChatEntry] {
+        var out = self
+        let shown = A2UIStream(plan.a2ui).surfaces.filter { $0.root != nil }
+        if !shown.isEmpty, !out.isEmpty { out[0].surfaces = shown }
+        return out
     }
 }
 #endif

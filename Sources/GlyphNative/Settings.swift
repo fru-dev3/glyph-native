@@ -128,6 +128,10 @@ struct SettingsPage<Toggle: View>: View {
             VStack(alignment: .leading, spacing: 20) {
                 if sub == .about { aboutBody } else if sub == .answers { answersBody } else { settingsBody }
             }
+            // Settings is four rows of a label and one value: on a wide window the value sat two thousand
+            // points from its label. The rows keep a readable width; About and Answers are grids and fill.
+            .frame(maxWidth: sub == .about || sub == .answers ? .infinity : 720, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 28).padding(.top, 22).padding(.bottom, 24)
         }
         .scrollEdgeEffectHidden(true, for: .all)

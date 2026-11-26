@@ -65,7 +65,7 @@ extension Hub {
     public func newNote(_ text: String, tags: [String]) async -> Done {
         let tags = tags.filter { !$0.isEmpty }
         let stem = fileStem(now())
-        let code = await put("memo/\(stem)", body: JotMemo.body(text: text, tags: tags, device: device))
+        let code = await put("memo/\(stem)", body: JotMemo.body(text: text, tags: tags, device: device, where: place))
         if code == nil { return kept("jot", text) }
         guard code == 204 else { return Done(agent: "jot", line: "Jot didn't take it (\(code!)): \(text)", title: text, ok: false) }
         return Done(agent: "jot", line: "Saved in Jot\(tags.isEmpty ? "" : " as \(tags.joined(separator: ", "))"): \(text)", title: text, ok: true,

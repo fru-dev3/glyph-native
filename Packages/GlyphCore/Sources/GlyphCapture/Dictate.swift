@@ -33,6 +33,11 @@ public final class LiveDictation {
     public private(set) var finishing = false
     /// The words so far: final ones, then the guess for what is being said now.
     public private(set) var text = ""
+    /// The front of `text` the model has settled on. The talk screen draws it in full ink and the
+    /// rest, still being heard, in grey, the way Glyph Jot's recording screen does.
+    public private(set) var settled = ""
+    /// The words still being heard: what follows `settled` in `text`.
+    public var pending: String { text.hasPrefix(settled) ? String(text.dropFirst(settled.count)) : "" }
     /// A message to show (the model downloading, the microphone refused...).
     public private(set) var problem: String?
     /// 0...1, the loudness right now, for level bars.
@@ -44,8 +49,11 @@ public final class LiveDictation {
     private var loudest: Double = 0
     /// Which way the words are being heard, for diagnosis ("SpeechTranscriber en_US", "SFSpeechRecognizer").
     public private(set) var route = ""
-    /// When this run started, for an app that shows how long it has been listening.
+    /// When this run started, for an app that shows how long it has been listening. Moved on by
+    /// each pause on resume, so a timer drawn from it counts listening time, as Jot's does.
     public private(set) var startedAt: Date?
+    /// When the current pause began, nil while listening: the `pauseTime` of a timer.
+    public private(set) var pausedAt: Date?
 
     /// AppKit or any code without SwiftUI: the words as they change, and the final words on stop.
     public var onText: ((String) -> Void)?
@@ -105,8 +113,10 @@ public final class LiveDictation {
         guard !on else { return }
         problem = nil
         text = ""
+        settled = ""
         on = true
         startedAt = .now
+        pausedAt = nil
         paused = false
         finished = false
         // Per take, not per launch: left unreset, the second take of a session inherited the
@@ -126,8 +136,11 @@ public final class LiveDictation {
                     while self.paused { try? await Task.sleep(for: .milliseconds(50)) }
                     said.append(w)
                     self.text = said.joined(separator: " ")
+                    // The last few words stay "being heard", as a real model's tail does.
+                    self.settled = said.count > 3 ? said.dropLast(3).joined(separator: " ") + " " : ""
                     self.onText?(self.text)
-                    self.level = 0.4
+                    // A level that moves, so a waveform drawn from it moves as speech does.
+                    self.level = 0.25 + 0.6 * Double((said.count * 7) % 10) / 10
                 }
             }
             return
@@ -142,6 +155,7 @@ public final class LiveDictation {
     public func pause() {
         guard on, !paused else { return }
         paused = true
+        pausedAt = .now
         level = 0
         if engine.isRunning { engine.pause() }
     }
@@ -149,6 +163,8 @@ public final class LiveDictation {
     public func resume() {
         guard on, paused else { return }
         paused = false
+        if let began = pausedAt, let s = startedAt { startedAt = s.addingTimeInterval(Date.now.timeIntervalSince(began)) }
+        pausedAt = nil
         if taking == nil, Self.audioFile == nil { try? engine.start() }
     }
 
@@ -165,11 +181,12 @@ public final class LiveDictation {
         legacy?.endAudio()
         on = false
         paused = false
+        pausedAt = nil
         level = 0
         #if os(iOS)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         #endif
-        if let words = taking { text = words; taking = nil; finish(); return }  // a test's words arrive whole
+        if let words = taking { text = words; settled = words; taking = nil; finish(); return }  // a test's words arrive whole
         if task == nil { finish() } else { finishing = true }  // run() finishes after the model has
     }
 
@@ -246,6 +263,7 @@ public final class LiveDictation {
         #endif
         finishing = false
         task = nil
+        settled = text
         guard !finished else { return }
         finished = true
         // A take that heard nothing at all, for seconds on end, and said nothing was wrong. Twice
@@ -316,8 +334,9 @@ public final class LiveDictation {
         if rms > loudest { loudest = rms }
     }
 
-    private func set(_ words: String) {
+    private func set(_ words: String, settled: String? = nil) {
         text = words
+        self.settled = settled ?? words
         onText?(words)
     }
 
@@ -325,7 +344,8 @@ public final class LiveDictation {
     private func put(_ words: String, at i: Int) {
         guard i < parts.count else { return }
         parts[i] = words.trimmingCharacters(in: .whitespacesAndNewlines)
-        set(parts.filter { !$0.isEmpty }.joined(separator: " "))
+        let done = parts[..<i].filter { !$0.isEmpty }.joined(separator: " ")
+        set(parts.filter { !$0.isEmpty }.joined(separator: " "), settled: done.isEmpty ? "" : done + " ")
     }
 
     // MARK: The model
@@ -465,7 +485,7 @@ public final class LiveDictation {
                 for try await (piece, final) in results {
                     let p = piece.trimmingCharacters(in: .whitespacesAndNewlines)
                     if final { done = done.isEmpty ? p : done + " " + p; self?.set(done) }
-                    else { self?.set(done.isEmpty ? p : done + " " + p) }
+                    else { self?.set(done.isEmpty ? p : done + " " + p, settled: done.isEmpty ? "" : done + " ") }
                 }
             } catch {}
             // Ended, either way. Said out loud rather than swallowed, so `run` can start another

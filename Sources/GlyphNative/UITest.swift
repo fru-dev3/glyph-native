@@ -202,6 +202,11 @@ enum UITest {
         await click("filter.all")
         check(await page("apps"), "All apps returns from Vault")
 
+        // GLYPH_NATIVE_NO_INSTALL=1 stops here, out loud: the steps below download a real release, and each
+        // uninstall leaves a Glyph Time in the real Trash, which a run on the Mac being worked on must not do.
+        if ProcessInfo.processInfo.environment["GLYPH_NATIVE_NO_INSTALL"] != nil {
+            print("  SKIP  install, uninstall, install of Glyph Time (GLYPH_NATIVE_NO_INSTALL)"); fflush(stdout); return
+        }
         // The smallest download, Glyph Time: install, uninstall, install, with the real buttons.
         func row() -> Shelf.Row? { s.rows.first { $0.app.id == "time" } }
         func done() async -> Bool { await until(150) { s.running == nil && s.lastResult != nil } }

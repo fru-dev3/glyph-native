@@ -1,5 +1,5 @@
-#if os(iOS)
 import CoreLocation
+import GlyphVault
 import MapKit
 
 /// Where the phone is, and what that place is called. Lifted out of Glyph Jot, which has done
@@ -9,13 +9,32 @@ import MapKit
 ///
 /// Nothing here writes anything. It answers where you are and what it is called; what an app does
 /// with that is the app's own business.
+///
+/// The Mac asks the same way (2026-11-23, "location and device is for all apps and desktop"): an app
+/// that wants it carries `NSLocationUsageDescription` and, sandboxed, the location entitlement; without
+/// them the answer is nil and nothing is asked.
 @MainActor
 public enum GlyphPlace {
+    /// Where an item is being saved, named: one fix (`within` at most) and its name. Nil when location is
+    /// off or no fix came, never a guess. Write the item first and add this after: nothing waits on it.
+    public static func here(within: Duration = .seconds(15)) async -> Where? {
+        guard let fix = await fix(within: within) else { return nil }
+        return Where(place: await name(for: fix), lat: fix.coordinate.latitude, lon: fix.coordinate.longitude)
+    }
+
     /// A fix, or nil: location refused, or nothing within thirty seconds.
-    public static func fix() async -> CLLocation? {
-        await withTaskGroup(of: CLLocation?.self) { group in
-            group.addTask { await best() }
-            group.addTask { try? await Task.sleep(for: .seconds(30)); return nil }
+    public static func fix(within: Duration = .seconds(30)) async -> CLLocation? {
+        #if os(macOS)
+        // The Mac has no CLServiceSession: the manager asks once, and stays alive while the fix comes.
+        let manager = CLLocationManager()
+        if manager.authorizationStatus == .notDetermined { manager.requestWhenInUseAuthorization() }
+        defer { withExtendedLifetime(manager) {} }
+        #endif
+        // At the deadline, the best fix seen so far rather than none: indoors a 50 m fix may never come.
+        let seen = Seen()
+        return await withTaskGroup(of: CLLocation?.self) { group in
+            group.addTask { await best(seen) }
+            group.addTask { try? await Task.sleep(for: within); return seen.value }
             let first = await group.next() ?? nil
             group.cancelAll()
             return first
@@ -23,15 +42,24 @@ public enum GlyphPlace {
     }
 
     /// The first fix within 50 m, or the best one after 10 seconds.
-    nonisolated static func best() async -> CLLocation? {
+    final class Seen: @unchecked Sendable {
+        private let lock = NSLock()
+        private var best: CLLocation?
+        var value: CLLocation? { lock.withLock { best } }
+        func offer(_ l: CLLocation) { lock.withLock { if l.horizontalAccuracy < (best?.horizontalAccuracy ?? .infinity) { best = l } } }
+    }
+
+    nonisolated static func best(_ seen: Seen = Seen()) async -> CLLocation? {
+        #if os(iOS)
         let session = CLServiceSession(authorization: .whenInUse) // asks once, the first time
         defer { session.invalidate() }
+        #endif
         let deadline = Date.now.addingTimeInterval(10)
         var best: CLLocation?
         do {
             for try await update in CLLocationUpdate.liveUpdates() {
                 if update.authorizationDenied || update.authorizationDeniedGlobally || update.authorizationRestricted { return nil }
-                if let l = update.location, l.horizontalAccuracy >= 0, l.horizontalAccuracy < (best?.horizontalAccuracy ?? .infinity) { best = l }
+                if let l = update.location, l.horizontalAccuracy >= 0, l.horizontalAccuracy < (best?.horizontalAccuracy ?? .infinity) { best = l; seen.offer(l) }
                 if let best, best.horizontalAccuracy <= 50 || Date.now > deadline { return best }
             }
         } catch {}
@@ -69,4 +97,3 @@ public enum GlyphPlace {
         return city.map { $0 == name ? name : "\(name), \($0)" } ?? name
     }
 }
-#endif

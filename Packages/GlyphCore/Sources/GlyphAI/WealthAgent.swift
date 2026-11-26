@@ -131,7 +131,7 @@ extension Hub {
         let id = UUID().uuidString.lowercased()
         let shown = name.isEmpty ? said : name.prefix(1).uppercased() + name.dropFirst()
         let line = WealthLine.log(id: id, kind: kind, name: name.isEmpty ? "" : String(shown), cents: cents, at: at,
-                                  host: host, device: device, account: account, category: category, said: said)
+                                  host: host, device: device, account: account, category: category, said: said, where: place)
         let what = cents.map { "\(String(shown)) \(Self.dollars($0))" } ?? String(shown)
         guard let code = await put("wealth/\(WealthLine.file(now(), host: host))", body: Data(line.utf8), type: "application/x-ndjson") else {
             return kept("wealth", what)
@@ -146,10 +146,10 @@ extension Hub {
         let id = UUID().uuidString.lowercased()
         let at = now()
         var body = WealthLine.log(id: id, kind: "account", name: name, cents: nil, at: at, host: host, device: device,
-                                  institution: institution, group: group, said: name)
+                                  institution: institution, group: group, said: name, where: place)
         if let cents {
             body += WealthLine.log(id: UUID().uuidString.lowercased(), kind: "balance", name: "", cents: cents, at: at,
-                                   host: host, device: device, account: id, said: name)
+                                   host: host, device: device, account: id, said: name, where: place)
         }
         let what = name + (cents.map { ", \(Self.dollars($0))" } ?? "")
         guard let code = await put("wealth/\(WealthLine.file(at, host: host))", body: Data(body.utf8), type: "application/x-ndjson") else {

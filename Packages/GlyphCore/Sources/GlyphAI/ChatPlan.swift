@@ -49,9 +49,15 @@ public struct ChatPlan: Decodable, Equatable, Sendable {
     public var suggest: String
     /// Who wrote the answer, as the hub says it ("claude", "council(claude,codex)"); empty from an older hub.
     public var answeredBy: String
+    /// A screen to show with the answer, when one beats words: A2UI 1.0 messages in the Glyph catalog
+    /// (`dev.fru.glyph/catalog/v1`, GlyphCapture `A2UI.md`), already checked by the hub. Empty for plain
+    /// chat and quiet saves, and from an older hub. `reply` or `question` still says it all in words.
+    public var a2ui: [JSONValue]
 
-    public init(kind: String, reply: String = "", question: String = "", jobs: [Job] = [], suggest: String = "", answeredBy: String = "") {
+    public init(kind: String, reply: String = "", question: String = "", jobs: [Job] = [], suggest: String = "", answeredBy: String = "",
+                a2ui: [JSONValue] = []) {
         self.kind = kind; self.reply = reply; self.question = question; self.jobs = jobs; self.suggest = suggest; self.answeredBy = answeredBy
+        self.a2ui = a2ui
     }
     public init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
@@ -61,8 +67,9 @@ public struct ChatPlan: Decodable, Equatable, Sendable {
         jobs = try c.decodeIfPresent([Job].self, forKey: .jobs) ?? []
         suggest = try c.decodeIfPresent(String.self, forKey: .suggest) ?? ""
         answeredBy = try c.decodeIfPresent(String.self, forKey: .answeredBy) ?? ""
+        a2ui = (try? c.decodeIfPresent([JSONValue].self, forKey: .a2ui)) ?? []
     }
-    enum CodingKeys: String, CodingKey { case kind, reply, question, jobs, suggest; case answeredBy = "answered_by" }
+    enum CodingKeys: String, CodingKey { case kind, reply, question, jobs, suggest, a2ui; case answeredBy = "answered_by" }
 
     /// Time's armed answer as the confirmed card: "Alarm set · 3:32 PM · Take a walk". The time is Time's own
     /// (from its answer, "Alarm: Take a walk, today at 3:32 PM"), the hub's `at` only when Time's has none.
@@ -84,10 +91,10 @@ public struct ChatPlan: Decodable, Equatable, Sendable {
     }
 }
 
-/// Any JSON value, so a job's arguments pass through as they came.
-enum JSONValue: Codable, Equatable {
+/// Any JSON value, so a job's arguments pass through as they came (and an A2UI message, GlyphCapture `A2UI`).
+public enum JSONValue: Codable, Equatable, Sendable {
     case string(String), number(Double), bool(Bool), null, array([JSONValue]), object([String: JSONValue])
-    init(from d: Decoder) throws {
+    public init(from d: Decoder) throws {
         let c = try d.singleValueContainer()
         if c.decodeNil() { self = .null }
         else if let b = try? c.decode(Bool.self) { self = .bool(b) }
@@ -96,7 +103,7 @@ enum JSONValue: Codable, Equatable {
         else if let a = try? c.decode([JSONValue].self) { self = .array(a) }
         else { self = .object(try c.decode([String: JSONValue].self)) }
     }
-    func encode(to e: Encoder) throws {
+    public func encode(to e: Encoder) throws {
         var c = e.singleValueContainer()
         switch self {
         case .string(let s): try c.encode(s)
@@ -130,8 +137,12 @@ extension Hub {
         await MainActor.run { EntityScan.shared = scan }
     }
 
+    /// `tag`: the tag he picked before saying it (the composer's `#`), sent as a hint to file
+    /// what was said under. Only ever one he chose; never one an app guessed.
+    /// `supportedCatalogIds`: the A2UI catalogs this app draws (GlyphCapture `A2UI.catalogId`); only then may the
+    /// answer carry a screen (`ChatPlan.a2ui`). Sent per turn as the spec's `a2uiRendererCapabilities`.
     public func understand(surface: String, text: String, history: [ChatTurn] = [], period: String? = nil, preferences: String? = nil,
-                           now: Date = .now, timeZone: TimeZone = .current) async -> ChatPlan? {
+                           tag: String? = nil, supportedCatalogIds: [String] = [], now: Date = .now, timeZone: TimeZone = .current) async -> ChatPlan? {
         // Anything a write kept while the hub was away goes first. `flush()` says "call on launch and
         // before each turn", and four of the eleven apps did: Glyph Jot, Well, Wealth, Omega, CRM and
         // Time told Fru "Kept on this iPhone, sends when the hub is back" and then never sent it,
@@ -148,11 +159,29 @@ extension Hub {
         if preferences == nil { prefs = await preferenceText(for: surface) }
         if !prefs.isEmpty { body["preferences"] = prefs }
         if let period { body["period"] = period }
+        if let tag, !tag.isEmpty { body["tag"] = tag }
+        if !supportedCatalogIds.isEmpty { body["a2uiRendererCapabilities"] = ["1.0": ["supportedCatalogIds": supportedCatalogIds]] }
         // A council takes minutes where one engine takes seconds: wait as long as this app's choice needs (the last
         // settings this phone read), and look at the settings again in the background when they are old.
         let wait = AnswerSettings.timeout(for: AnswerSettings.cached?.choice(for: surface) ?? ["auto"])
         if AnswerSettings.stale { Task { _ = await fetchAnswers() } }
         guard let (code, data) = await send("POST", "understand", body: json(body), timeout: wait), code == 200 else { return nil }
+        return try? JSONDecoder().decode(ChatPlan.self, from: data)
+    }
+
+    /// What was done on a screen the hub sent (an A2UI 1.0 `action` message, `{"version": "1.0", "action": {...}}`)
+    /// as the next chat turn: POST /a2ui/action. The answer is a plan like `understand`'s, and may carry the next
+    /// screen. Nil when the hub can't be reached or the message is not an action.
+    public func answer(action message: JSONValue, surface: String, history: [ChatTurn] = [],
+                       supportedCatalogIds: [String] = ["dev.fru.glyph/catalog/v1"], now: Date = .now,
+                       timeZone: TimeZone = .current) async -> ChatPlan? {
+        let f = ISO8601DateFormatter(); f.timeZone = timeZone; f.formatOptions = [.withInternetDateTime]
+        guard let msg = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(message)) else { return nil }
+        let body: [String: Any] = ["surface": surface, "message": msg, "now": f.string(from: now), "tz": timeZone.identifier,
+                                   "history": history.suffix(6).map { ["role": $0.mine ? "user" : "app", "text": $0.text] },
+                                   "a2uiRendererCapabilities": ["1.0": ["supportedCatalogIds": supportedCatalogIds]]]
+        let wait = AnswerSettings.timeout(for: AnswerSettings.cached?.choice(for: surface) ?? ["auto"])
+        guard let (code, data) = await send("POST", "a2ui/action", body: json(body), timeout: wait), code == 200 else { return nil }
         return try? JSONDecoder().decode(ChatPlan.self, from: data)
     }
 

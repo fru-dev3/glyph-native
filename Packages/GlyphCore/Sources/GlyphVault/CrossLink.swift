@@ -40,10 +40,11 @@ public enum CrossLink {
             return title(slug)
         }
         var out: [FilePlace] = []
-        for d in dirs("data/domains") {
-            out.append(FilePlace(path: "data/domains/\(d)", label: title(d), kind: "domain"))
-            for a in dirs("data/domains/\(d)/memory/current/applications") {
-                out.append(FilePlace(path: "data/domains/\(d)/memory/current/applications/\(a)", label: title(a), kind: "application"))
+        let tags = TagFolders.root(vault)
+        for d in dirs(tags) {
+            out.append(FilePlace(path: "\(tags)/\(d)", label: title(d), kind: "domain"))
+            for a in dirs("\(tags)/\(d)/memory/current/applications") {
+                out.append(FilePlace(path: "\(tags)/\(d)/memory/current/applications/\(a)", label: title(a), kind: "application"))
             }
         }
         for (folder, kind) in [("people", "person"), ("orgs", "org"), ("places", "place"), ("things", "thing")] {

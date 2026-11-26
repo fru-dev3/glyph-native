@@ -93,7 +93,7 @@ extension Hub {
         guard !words.isEmpty else { return Done(agent: "travel", line: "Nothing to add", title: "Nothing to add", ok: false) }
         let id = UUID().uuidString
         let line = TravelLine.plan(id: id, name: words, trip: trip, day: day, reference: reference,
-                                   host: host, device: device, now: now())
+                                   host: host, device: device, where: place, now: now())
         return await write(line, id: id, said: words, how: "Added in Travel")
     }
 
@@ -101,7 +101,7 @@ extension Hub {
         let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !words.isEmpty else { return Done(agent: "travel", line: "Nothing heard", title: "Nothing heard", ok: false) }
         let id = UUID().uuidString
-        let line = TravelLine.note(id: id, text: words, trip: trip, host: host, device: device, now: now())
+        let line = TravelLine.note(id: id, text: words, trip: trip, host: host, device: device, where: place, now: now())
         return await write(line, id: id, said: String(words.prefix(60)), how: "Noted in Travel")
     }
 

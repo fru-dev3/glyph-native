@@ -49,6 +49,10 @@ public struct GlyphDiscLabel: View {
             .frame(width: 36, height: 36)
             .background(Color.glyphDisc, in: Circle())
             .contentShape(Circle())
+            // The disc is dark in both appearances, as the composer is (2026-11-18), so what is
+            // drawn on it resolves for dark: under a light system `.primary` was black on the
+            // near-black disc and the brand green its darker half (Glyph Time, pictured 2026-11-20).
+            .environment(\.colorScheme, .dark)
     }
 }
 
@@ -76,8 +80,6 @@ public struct GlyphSegments: View {
         self.tint = tint
     }
 
-    @Environment(\.colorScheme) private var scheme
-
     public var body: some View {
         HStack(spacing: 0) {
             ForEach(Array(segments.enumerated()), id: \.offset) { i, s in
@@ -91,7 +93,7 @@ public struct GlyphSegments: View {
                     .frame(maxWidth: .infinity).frame(height: 52)
                     .background {
                         if on {
-                            Capsule().fill(tint.opacity(scheme == .dark ? 0.18 : 0.12))
+                            Capsule().fill(tint.opacity(0.18))
                                 .overlay(Capsule().stroke(tint.opacity(0.35), lineWidth: 1))
                         }
                     }
@@ -104,12 +106,16 @@ public struct GlyphSegments: View {
         }
         .padding(3)
         .background(Color.glyphDisc, in: Capsule())
+        // Dark in both appearances, like the disc above: under a light system the unchosen half
+        // was dark grey on the near-black pill.
+        .environment(\.colorScheme, .dark)
         .animation(.snappy(duration: 0.18), value: selection)
     }
 }
 
 public extension Color {
     /// The dark fill under the family's chrome: a corner disc, a segmented control, a quiet bar.
+    /// Dark under a light system too, so whatever sits on it takes `.environment(\.colorScheme, .dark)`.
     static let glyphDisc = Color(white: 0.11)
 }
 
@@ -178,24 +184,45 @@ public struct GlyphAppMark: View {
         self.name = name; self.mark = mark; self.tint = tint; self.page = page
     }
 
+    @Environment(\.glyphHome) private var home
+
     public var body: some View {
+        if let home {
+            // The mark and name go home (Fru, 2026-11-23); the line stays one container named
+            // "glyph.page", so a check still reads which app and page it is on.
+            HStack(spacing: 8) {
+                GlyphHomeButton(app: name, go: home) { appBlock }
+                pageName
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(page.map { "\(name), \($0)" } ?? name)
+            .accessibilityIdentifier("glyph.page")
+        } else {
+            HStack(spacing: 8) { appBlock; pageName }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(page.map { "\(name), \($0)" } ?? name)
+                // One name for the family's top line, so a check can ask which app and which page it is
+                // on without hunting for a navigation bar that no Glyph screen draws any more.
+                .accessibilityIdentifier("glyph.page")
+        }
+    }
+
+    private var appBlock: some View {
         HStack(spacing: 8) {
             Image(systemName: mark).font(.system(size: 12, weight: .bold))
                 .foregroundStyle(.white).frame(width: 20, height: 20)
                 .background(tint, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             Text(name).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(.secondary)
-            if let page {
-                // The app says which app, the page says which screen, and the dot keeps them
-                // from reading as one phrase ("Glyph CRM Orgs").
-                Circle().fill(.tertiary).frame(width: 3, height: 3)
-                Text(page).font(.system(size: 15, weight: .semibold)).foregroundStyle(.primary)
-                    .lineLimit(1).minimumScaleFactor(0.8)
-            }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(page.map { "\(name), \($0)" } ?? name)
-        // One name for the family's top line, so a check can ask which app and which page it is
-        // on without hunting for a navigation bar that no Glyph screen draws any more.
-        .accessibilityIdentifier("glyph.page")
+    }
+
+    @ViewBuilder private var pageName: some View {
+        if let page {
+            // The app says which app, the page says which screen, and the dot keeps them
+            // from reading as one phrase ("Glyph CRM Orgs").
+            Circle().fill(.tertiary).frame(width: 3, height: 3).accessibilityHidden(true)
+            Text(page).font(.system(size: 15, weight: .semibold)).foregroundStyle(.primary)
+                .lineLimit(1).minimumScaleFactor(0.8)
+        }
     }
 }

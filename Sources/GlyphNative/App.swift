@@ -228,7 +228,23 @@ final class Shelf: ObservableObject {
                 for await (id, v) in g { if let v { found[id] = v } }
             }
             latest = found; looked = true; lastChecked = .now; refresh()
+            ping()
             await fetchOwn()
+        }
+    }
+
+    private var pinged = false
+    /// Once per launch, after the first check: Glyph Native and each app it finds installed report their
+    /// id and version to fru.dev, nothing else (Release.pingURL). Fire and forget: the answer is never
+    /// read, so a failure cannot touch the update check. Skipped for tests, pictures and a debug binary.
+    private func ping() {
+        guard !pinged, !UITest.on, Bundle.main.bundleIdentifier != nil,
+              ProcessInfo.processInfo.environment["GLYPH_NATIVE_APPS"] == nil,
+              !CommandLine.arguments.contains("--picture") else { return }
+        pinged = true
+        let mine = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        for (id, v) in [("native", mine)] + rows.compactMap({ r in r.installed.map { (r.app.id, $0) } }) {
+            if let u = Release.pingURL(app: id, version: v) { URLSession.shared.dataTask(with: URLRequest(url: u, timeoutInterval: 10)).resume() }
         }
     }
 

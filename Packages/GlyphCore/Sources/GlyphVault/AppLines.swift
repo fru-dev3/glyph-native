@@ -19,6 +19,52 @@ func sortedJSON(_ o: [String: Any]) -> String {
     String(decoding: (try? JSONSerialization.data(withJSONObject: o, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data(), as: UTF8.self)
 }
 
+/// Where an item was saved (Fru, 2026-11-23: "Location and device is for all apps and desktop"): what the
+/// place is called and the coordinates it was named from. Every app line carries it as `place` (the name,
+/// left out when the lookup had none), `lat` and `lon` (6 decimals), beside the `device` it already has.
+/// Nil, never a guess, when location is off or no fix came. GlyphCapture's `GlyphPlace.here()` makes one.
+public struct Where: Codable, Equatable, Sendable {
+    public var place: String?
+    public var lat: Double
+    public var lon: Double
+
+    public init(place: String?, lat: Double, lon: Double) {
+        let p = place?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.place = p?.isEmpty == false ? p : nil
+        self.lat = Self.six(lat); self.lon = Self.six(lon)
+    }
+
+    /// Read back off a line: nil when it has no coordinates.
+    public init?(_ o: [String: Any]) {
+        guard let lat = (o["lat"] as? NSNumber)?.doubleValue, let lon = (o["lon"] as? NSNumber)?.doubleValue else { return nil }
+        self.init(place: o["place"] as? String, lat: lat, lon: lon)
+    }
+
+    /// The line's fields. The coordinates as decimals: a Double through JSONSerialization can print
+    /// 36.123457000000002, and 6 decimals means 6 decimals in the file.
+    public var fields: [String: Any] {
+        func d(_ x: Double) -> NSDecimalNumber { NSDecimalNumber(string: String(format: "%.6f", x), locale: Locale(identifier: "en_US_POSIX")) }
+        var o: [String: Any] = ["lat": d(lat), "lon": d(lon)]
+        if let place { o["place"] = place }
+        return o
+    }
+
+    /// Adds the fields to a line's object; nothing when there is no place.
+    public static func stamp(_ o: inout [String: Any], _ w: Where?) {
+        guard let w else { return }
+        o.merge(w.fields) { _, new in new }
+    }
+
+    /// The line an item's screen shows: "iPhone 17 Pro · Lake Street, Springfield". The item's own record,
+    /// never this device; nil when it has neither.
+    public static func shown(device: String?, place: String?) -> String? {
+        let parts = [device, place].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    static func six(_ x: Double) -> Double { (x * 1_000_000).rounded() / 1_000_000 }
+}
+
 /// Glyph Well's entry lines (WellKit's WellLog): `data/apps/well/entries/<YYYY-MM>.<host>.jsonl`.
 public enum WellLine {
     /// Every kind Glyph Well knows, which is `WellEvent.Kind` in WellKit and must stay equal to it:
@@ -30,10 +76,30 @@ public enum WellLine {
     public static let kinds = ["symptom", "mood", "energy", "sleep", "food", "med", "stress", "activity",
                                "event", "note", "lab", "stool", "visit"]
 
+    /// The everyday word for a kind, as a model writes it, onto Well's own: "medicine" is "med". On 2026-11-23 a
+    /// plan said "medicine" for two supplements and both were written as notes. Unknown words still become "note".
+    static let words = ["medicine": "med", "medication": "med", "medications": "med", "meds": "med", "supplement": "med",
+                        "supplements": "med", "vitamin": "med", "vitamins": "med", "pill": "med", "pills": "med", "drug": "med",
+                        "drink": "food", "meal": "food", "snack": "food", "workout": "activity", "exercise": "activity",
+                        "feeling": "mood", "emotion": "mood", "test": "lab", "result": "lab", "labs": "lab", "bloodwork": "lab",
+                        "doctor": "visit", "appointment": "visit", "bowel": "stool", "poop": "stool", "pain": "symptom"]
+
+    /// `kind` as one of `kinds`: itself, its everyday word, or "note".
+    public static func kind(of kind: String) -> String {
+        let low = kind.lowercased().trimmingCharacters(in: .whitespaces)
+        if kinds.contains(low) { return low }
+        if let k = words[low] { return k }
+        return "note"
+    }
+
     /// A `log` line: what happened (`name`, 1 to 4 words), its kind, the words it came from, when.
-    public static func log(id: String, kind: String, name: String, said: String, at: Date, host: String, device: String, now: Date = .now) -> String {
-        sortedJSON(["at": localStamp(at), "event": "log", "host": host, "device": device, "id": id,
-                    "kind": kinds.contains(kind) ? kind : "note", "name": name, "said": said, "via": "voice", "ts": localStamp(now)]) + "\n"
+    public static func log(id: String, kind: String, name: String, said: String, at: Date, host: String, device: String, where place: Where? = nil, now: Date = .now) -> String {
+        var o: [String: Any] = ["at": localStamp(at), "event": "log", "host": host, "device": device, "id": id,
+                                "kind": WellLine.kind(of: kind), "name": name, "said": said, "via": "voice", "ts": localStamp(now)]
+        // A Well line's `place` is a Glyph CRM id (Labs groups by it), so where it was said goes in `from`,
+        // as Glyph Well writes it, beside lat and lon.
+        if let place { o["lat"] = place.fields["lat"]; o["lon"] = place.fields["lon"]; if let n = place.place { o["from"] = n } }
+        return sortedJSON(o) + "\n"
     }
 
     /// Takes an entry back (the line stays in the file, as Well does it).
@@ -47,9 +113,11 @@ public enum WellLine {
 /// Glyph Jot's memo as the iPhone sends it to the hub (`PUT /memo/<stem>`); the stem is its id.
 public enum JotMemo {
     /// Tags name domains the way Jot does ("Dreams" to dreams); the hub keeps only domains that exist.
-    public static func body(text: String, tags: [String], device: String, kind: String = "voice") -> Data {
+    public static func body(text: String, tags: [String], device: String, kind: String = "voice", where place: Where? = nil) -> Data {
         let domains = tags.map { $0.lowercased().split { !$0.isLetter && !$0.isNumber }.joined(separator: "-") }
-        return Data(sortedJSON(["tags": tags, "domains": domains, "kind": kind, "text": text, "device": device]).utf8)
+        var o: [String: Any] = ["tags": tags, "domains": domains, "kind": kind, "text": text, "device": device]
+        Where.stamp(&o, place)
+        return Data(sortedJSON(o).utf8)
     }
 }
 
@@ -184,7 +252,7 @@ public enum WealthLine {
     /// heard a name and the app has to match it).
     public static func log(id: String, kind: String, name: String, cents: Int?, at: Date, host: String, device: String,
                            account: String? = nil, category: String? = nil, institution: String? = nil, group: String? = nil,
-                           said: String, via: String = "voice", now: Date = .now) -> String {
+                           said: String, via: String = "voice", where place: Where? = nil, now: Date = .now) -> String {
         let kind = kinds.contains(kind) ? kind : "note"
         var o: [String: Any] = ["at": localStamp(at), "event": "log", "host": host, "device": device, "id": id,
                                 "kind": kind, "said": said, "ts": localStamp(now), "via": via]
@@ -196,6 +264,7 @@ public enum WealthLine {
         if let group, groups.contains(group) { o["group"] = group }
         // A spend's payee is its name, as the app writes it, so a second import knows the merchant again.
         if kind == "spend", !name.isEmpty { o["payee"] = name }
+        Where.stamp(&o, place)
         return sortedJSON(o) + "\n"
     }
 
@@ -225,20 +294,37 @@ public enum WealthLine {
 ///     {"domain":"insurance","event":"run","id":"r-..","loop":"renewal-watch","state":"start","steps":4,"ts":".."}
 ///     {"event":"run","id":"r-..","n":2,"state":"step","ts":".."}
 ///     {"event":"run","id":"r-..","state":"done","ts":".."}
+///     {"amount":120,"domain":"records","event":"renewal","id":"n-..","on":"2027-03-03","rough":true,"said":"March 3","ts":"..","what":"Car registration"}
 ///     {"event":"delete","id":"d-..","ts":".."}      takes one back (the line stays)
 public enum LifeLine {
     /// A decision about a subscription's renewal: keep it, or cancel it. `app` is its id in the vault's app
     /// registry (`data/apps/<app>/manifest.json`), never a name; `amount` is what the decision is about, 0 when
     /// the registry has no cost on it.
-    public static func decide(id: String, app: String, choice: String, amount: Double, host: String, device: String, now: Date = .now) -> String {
-        sortedJSON(["amount": amount, "app": app, "choice": choice == "cancel" ? "cancel" : "keep", "device": device,
-                    "event": "decide", "host": host, "id": id, "ts": localStamp(now)]) + "\n"
+    public static func decide(id: String, app: String, choice: String, amount: Double, host: String, device: String, where place: Where? = nil, now: Date = .now) -> String {
+        var o: [String: Any] = ["amount": amount, "app": app, "choice": choice == "cancel" ? "cancel" : "keep", "device": device,
+                                "event": "decide", "host": host, "id": id, "ts": localStamp(now)]
+        Where.stamp(&o, place)
+        return sortedJSON(o) + "\n"
+    }
+
+    /// A renewal they told Life about ("car registration renews March 3, about $120"): what renews, the
+    /// day (`on`, yyyy-MM-dd), their words for it, and an amount only when they said one (`rough` when
+    /// they said "about"). Life's Due list reads it beside the domains' key dates.
+    public static func renewal(id: String, what: String, on day: String, said: String, amount: Double?, rough: Bool,
+                               domain: String, host: String, device: String, where place: Where? = nil, now: Date = .now) -> String {
+        var o: [String: Any] = ["device": device, "domain": domain, "event": "renewal", "host": host, "id": id, "on": day,
+                                "said": said, "ts": localStamp(now), "what": what]
+        if let amount, amount > 0 { o["amount"] = amount; if rough { o["rough"] = true } }
+        Where.stamp(&o, place)
+        return sortedJSON(o) + "\n"
     }
 
     /// A workflow run started: the loop's id and the domain it belongs to, with how many steps it has.
-    public static func start(id: String, loop: String, domain: String, steps: Int, host: String, device: String, now: Date = .now) -> String {
-        sortedJSON(["device": device, "domain": domain, "event": "run", "host": host, "id": id, "loop": loop,
-                    "state": "start", "steps": steps, "ts": localStamp(now)]) + "\n"
+    public static func start(id: String, loop: String, domain: String, steps: Int, host: String, device: String, where place: Where? = nil, now: Date = .now) -> String {
+        var o: [String: Any] = ["device": device, "domain": domain, "event": "run", "host": host, "id": id, "loop": loop,
+                                "state": "start", "steps": steps, "ts": localStamp(now)]
+        Where.stamp(&o, place)
+        return sortedJSON(o) + "\n"
     }
 
     /// One step of a run done (`n` counts from 1), or the whole run finished (`n` nil).
@@ -283,7 +369,8 @@ public enum TravelLine {
         return (d, w.hour)
     }
 
-    /// A trip. `when` is their words ("March 19 to March 31", "in July"); the first day read out of
+    /// A trip. Its `place` is where the trip goes, so a trip line takes no `Where` (its `device` says where it
+    /// was saved from); plans and notes do. `when` is their words ("March 19 to March 31", "in July"); the first day read out of
     /// them is the trip's start, the second its end. Nothing is invented when nothing was said.
     public static func trip(id: String, name: String, place: String, when: String, why: String,
                             host: String, device: String, now: Date = .now) -> String {
@@ -303,7 +390,7 @@ public enum TravelLine {
     /// One thing on one day. `trip` is the trip's name as they said it; Glyph Travel matches it to a
     /// trip when it opens, and an unmatched one sits on the next trip.
     public static func plan(id: String, name: String, trip: String, day said: String, reference: String,
-                            host: String, device: String, now: Date = .now) -> String {
+                            host: String, device: String, where place: Where? = nil, now: Date = .now) -> String {
         var o: [String: Any] = ["event": "plan", "host": host, "device": device, "id": id, "name": name,
                                 "ts": localStamp(now), "via": "voice"]
         if !trip.isEmpty { o["said"] = trip }
@@ -315,13 +402,15 @@ public enum TravelLine {
                 o["from"] = day(d)
             }
         }
+        Where.stamp(&o, place)
         return sortedJSON(o) + "\n"
     }
 
-    public static func note(id: String, text: String, trip: String, host: String, device: String, now: Date = .now) -> String {
+    public static func note(id: String, text: String, trip: String, host: String, device: String, where place: Where? = nil, now: Date = .now) -> String {
         var o: [String: Any] = ["event": "note", "host": host, "device": device, "id": id,
                                 "note": text, "ts": localStamp(now), "via": "voice"]
         if !trip.isEmpty { o["said"] = trip }
+        Where.stamp(&o, place)
         return sortedJSON(o) + "\n"
     }
 

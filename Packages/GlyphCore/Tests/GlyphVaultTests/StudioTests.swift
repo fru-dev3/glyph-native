@@ -25,6 +25,15 @@ func studioVault() throws -> URL {
     return root
 }
 
+@Test func studioReadsTheTagFoldersThroughTheOldName() throws {
+    // The vault as moved on 2026-11-22: data/domains is a link to data/tags, and a URL listing of a link is empty.
+    let root = try studioVault(), fm = FileManager.default
+    defer { try? fm.removeItem(at: root) }
+    try fm.moveItem(at: root.appending(path: "data/domains"), to: root.appending(path: "data/tags"))
+    try fm.createSymbolicLink(atPath: root.appending(path: "data/domains").path, withDestinationPath: "tags")
+    #expect(StudioDirectory(root: root).objects(.domain).map(\.name) == ["Career", "Real Estate"])
+}
+
 @Test func studioObjectsUseStudiosIdsAndNames() throws {
     let s = StudioDirectory(root: try studioVault())
     #expect(s.objects(.person).map(\.id) == ["person/ken-lee", "person/kim-park"])

@@ -20,12 +20,14 @@ extension GlyphAgent {
         You are Glyph Life's agent: the operational side of everyday life. A decision about a \
         subscription or a renewal, keep it or cancel it: decide_renewal with the service as they named it. \
         A recurring administrative job they want to work through (a renewal check, a coverage review, an \
-        enrolment): start_workflow. One step of a run finished: finish_step. Nothing else is yours: a \
+        enrolment): start_workflow. One step of a run finished: finish_step. Something that renews, expires or \
+        comes due on a day they name (a car registration, a passport, a licence, a policy, a membership): add_renewal, \
+        with the day as said and the amount only when they said one. Nothing else is yours: a \
         reminder or an alarm belongs to Glyph Time, a company or a thing to Glyph CRM, a goal to Glyph \
         Omega, and filing a document to the filer. Never invent an amount; leave it at 0 when they did not say one.
         """,
         tools: { hub, ledger in [LifeDecideRenewal(hub: hub, ledger: ledger), LifeStartWorkflow(hub: hub, ledger: ledger),
-                                 LifeFinishStep(hub: hub, ledger: ledger)] },
+                                 LifeFinishStep(hub: hub, ledger: ledger), LifeAddRenewal(hub: hub, ledger: ledger)] },
         fallback: { job, hub in
             await hub.decideRenewal(app: job.name.isEmpty ? job.instruction : job.name,
                                     keep: !job.instruction.lowercased().contains("cancel"), amount: 0)
@@ -43,6 +45,23 @@ public struct LifeDecideRenewal: Tool {
     let hub: Hub, ledger: Ledger
     public func call(arguments a: Arguments) async throws -> String {
         let d = await hub.decideRenewal(app: a.service, keep: a.keep, amount: a.amount)
+        await ledger.add(d); return d.line
+    }
+}
+
+public struct LifeAddRenewal: Tool {
+    public let name = "add_renewal"
+    public let description = "Put something that renews, expires or comes due on a day on Glyph Life's Due list."
+    @Generable public struct Arguments {
+        @Guide(description: "What renews, in their words: car registration, passport.") public var what: String
+        @Guide(description: "The day, as said: March 3, next April, 2027-04-12.") public var when: String
+        @Guide(description: "The amount they said, in dollars; 0 when they did not say one.", .range(0...1_000_000)) public var amount: Double
+        @Guide(description: "true when they said about, around or roughly before the amount.") public var rough: Bool
+        @Guide(description: "One of records, insurance, benefits, estate, homestead, family, civic, general.") public var domain: String
+    }
+    let hub: Hub, ledger: Ledger
+    public func call(arguments a: Arguments) async throws -> String {
+        let d = await hub.addRenewal(a.what, when: a.when, amount: a.amount, rough: a.rough, domain: a.domain)
         await ledger.add(d); return d.line
     }
 }
@@ -111,13 +130,36 @@ extension Hub {
         let found = await lifeApp(said)
         let id = "d-" + UUID().uuidString.prefix(12)
         let line = LifeLine.decide(id: id, app: found.id, choice: keep ? "keep" : "cancel",
-                                   amount: amount > 0 ? amount : found.amount, host: host, device: device, now: now())
+                                   amount: amount > 0 ? amount : found.amount, host: host, device: device, where: place, now: now())
         let code = await lifePut(line)
         let what = (keep ? "Keeping " : "Cancelling ") + found.name
         if code == nil { return kept("life", what) }
         guard code == 204 else { return Done(agent: "life", line: "Life didn't take it (\(code!)): \(what)", title: what, ok: false) }
         return Done(agent: "life", line: what + ".", title: what, ok: true,
                     undo: .lifeDelete(id: id), link: URL(string: "glyph-life://money"))
+    }
+
+    /// A renewal on the Due list, on the day they said, read forward (a renewal is still to come). Nothing is
+    /// written when no day can be read from their words: Life never guesses a date.
+    public func addRenewal(_ what: String, when said: String, amount: Double, rough: Bool, domain: String) async -> Done {
+        let name = what.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A day written out (2027-04-12) as it is; a guessed one ("next month" reads as today, with a question) is no day at all.
+        let iso = DateFormatter(); iso.locale = Locale(identifier: "en_US_POSIX"); iso.dateFormat = "yyyy-MM-dd"
+        let written = said.firstMatch(of: /\d{4}-\d{2}-\d{2}/).flatMap { iso.date(from: String($0.output)) }
+        guard let day = written ?? (Recall.when(said, now: now())?.question == nil ? TravelLine.ahead(said, now: now())?.day : nil) else {
+            return Done(agent: "life", line: "When does \(name.isEmpty ? "it" : name) renew?", title: name, ok: false)
+        }
+        let on = TravelLine.day(day)
+        let dom = MacHub.lifeDomains.contains(domain.lowercased()) ? domain.lowercased() : "general"
+        let id = "n-" + UUID().uuidString.prefix(12)
+        let code = await lifePut(LifeLine.renewal(id: id, what: name, on: on, said: said, amount: amount > 0 ? amount : nil, rough: rough,
+                                                  domain: dom, host: host, device: device, where: place, now: now()))
+        let f = DateFormatter(); f.dateFormat = "MMMM d, yyyy"
+        let money = amount > 0 ? ", \(rough ? "about " : "")$\(amount.formatted(.number.precision(.fractionLength(0...2))))" : ""
+        let line = "\(name) renews \(f.string(from: day))\(money)"
+        if code == nil { return kept("life", line) }
+        guard code == 204 else { return Done(agent: "life", line: "Life didn't take it (\(code!)): \(line)", title: line, ok: false) }
+        return Done(agent: "life", line: line + ".", title: name, ok: true, undo: .lifeDelete(id: id), link: URL(string: "glyph-life://"))
     }
 
     /// The loop their words name, from what the hub serves, with its step count. Nothing is started
@@ -151,7 +193,7 @@ extension Hub {
         }
         let id = "r-" + UUID().uuidString.prefix(12)
         let code = await lifePut(LifeLine.start(id: id, loop: found.loop, domain: found.domain, steps: found.steps,
-                                                host: host, device: device, now: now()))
+                                                host: host, device: device, where: place, now: now()))
         let what = "Started \(found.name), \(found.steps) steps"
         if code == nil { return kept("life", what) }
         guard code == 204 else { return Done(agent: "life", line: "Life didn't take it (\(code!)): \(what)", title: what, ok: false) }

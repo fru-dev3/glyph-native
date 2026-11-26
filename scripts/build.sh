@@ -4,20 +4,13 @@
 # instead. --install copies it to /Applications.
 set -euo pipefail
 
-# Fru, 2026-10-31, stated three times and absolute: nothing executes on the Mac he works on.
-# Builds, tests, simulators, screenshots and microphone checks go to the unattended desktop or to
-# a laptop deliberately marked as a test host. The desktop has no battery and needs no flag.
-# Detecting a battery rather than matching a computer name, because a name match wrongly refuses
-# on a dedicated test laptop whose name happens to match the pattern.
-if pmset -g batt 2>/dev/null | grep -q InternalBattery && [[ -z ${GLYPH_UI_HOST:-} ]]; then
-  echo >&2 "Nothing executes on the Mac being worked on. Run this on the unattended desktop,"
-  echo >&2 "or on a test laptop with GLYPH_UI_HOST=1 set."
-  exit 2
-fi
+# This refused to run on a laptop unless GLYPH_UI_HOST was set (Fru, 2026-10-31: nothing
+# executes on the Mac he is working on). He reversed that on 2026-11-07 ("all work needs to
+# happen here"), so the guard only meant every run needed an unwritten variable. Gone.
 cd "$(dirname "$0")/.."
 
-VERSION=0.6.6
-BUILD=14
+VERSION=0.6.7
+BUILD=15
 
 [[ -d /Applications/Xcode.app ]] && export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer} # the on-device model's macros
 swift build -c release --product GlyphNative

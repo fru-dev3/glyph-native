@@ -121,3 +121,35 @@ private func tempVault() throws -> URL {
     try TimeLog.append(TimeLog.routineLine(Routine(id: "R", title: "walk"), host: "phone", at: day(1, 9)), to: folder)
     #expect(try RoutineSuggest.run(vault: vault, write: false, now: now, cal: cal).isEmpty)
 }
+
+@Test func ongoingMedKeepsItsKindStartEndAndDose() {
+    // Every morning since four days ago, no end, a dose as said.
+    var med = Routine(id: "M1", title: "Vitamin D", time: day(0, 8))
+    med.kind = "med"; med.since = cal.startOfDay(for: day(4, 8)); med.dose = "2000 IU"
+    var lines = TimeLog.events(in: TimeLog.line(TimeLog.routineLine(med, host: "phone", at: day(4, 8))))
+    var r = TimeLog.routines(lines, cal: cal)[0]
+    #expect(r.kind == "med" && r.dose == "2000 IU" && r.since == cal.startOfDay(for: day(4, 8)) && r.until == nil)
+    #expect(r.active(now, cal) && r.target(on: day(5, 8), cal) == 0 && r.target(on: day(1, 8), cal) == 1)
+
+    // Taken 4 and 2 days ago here, 3 days ago in Glyph Well; yesterday missed; today not missed yet.
+    lines += [TimeEvent("done", at: day(4, 8), host: "phone", id: "M1"), TimeEvent("done", at: day(2, 8), host: "phone", id: "M1")]
+    r = TimeLog.routines(lines, cal: cal)[0]
+    let rec = r.record(alsoTaken: [day(3, 9)], now: now, cal)
+    #expect(rec.taken.count == 3 && rec.missed == [cal.startOfDay(for: day(1, 0))])
+
+    // Stopped yesterday: nothing due today, the record stays, and the line says so.
+    r.until = day(1, 20)
+    let stopped = TimeLog.routines(lines + [TimeLog.routineLine(r, host: "phone", at: day(1, 20))], cal: cal)[0]
+    #expect(!stopped.active(now, cal) && stopped.target(on: now, cal) == 0 && stopped.until != nil)
+}
+
+@Test func aWorkoutOnItsDaysIsMissedOnlyOnThoseDays() {
+    // Mon, Wed, Fri at 6, since a week ago Monday (2026-10-19 was a Monday; now is Friday the 30th).
+    var gym = Routine(id: "G1", title: "Gym", days: [1, 3, 5], time: day(0, 6))
+    gym.kind = "workout"; gym.since = cal.date(from: DateComponents(year: 2026, month: 10, day: 19))!
+    gym.checks = [cal.date(from: DateComponents(year: 2026, month: 10, day: 19, hour: 6))!,
+                  cal.date(from: DateComponents(year: 2026, month: 10, day: 23, hour: 6))!]
+    let rec = gym.record(now: now, cal)
+    // Due Mon 19, Wed 21, Fri 23, Mon 26, Wed 28: taken 19 and 23, missed the other three.
+    #expect(rec.taken.count == 2 && rec.missed.count == 3)
+}

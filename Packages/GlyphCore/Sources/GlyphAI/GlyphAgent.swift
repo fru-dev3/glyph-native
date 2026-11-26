@@ -108,11 +108,15 @@ public struct Hub: Sendable {
     public var vault: URL?
     /// The month files' host part when it isn't an iPhone's ("laptop-local" on a Mac).
     public var hostName: String?
+    /// Where this turn was said (`GlyphPlace.here()`), stamped on every line the tools write. Nil: no place.
+    public var place: Where?
 
     public init(base: URL?, model: String, app: String = "Glyph Native", timeQueue: URL = TimeRequest.queue) {
         self.base = base; self.model = model; self.app = app; self.timeQueue = timeQueue
     }
-    public var device: String { "\(app), \(model)" }
+    /// The device a line was saved on, as every app writes it ("iPhone 15 Pro", the Mac's name): the model
+    /// alone since 0.14.1, so an agent's line reads like the app's own. It was "<app>, <model>".
+    public var device: String { model }
     /// The month files' host part: `hostName` on a Mac, else this device's own.
     ///
     /// It used to slug `model`, which made the host depend on how each app happened to name the

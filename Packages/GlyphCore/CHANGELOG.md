@@ -4,6 +4,142 @@ GlyphCore follows semantic versioning (the number is in `VERSION`). A change tha
 the on-disk format or breaks the public API is a major version, a new API a minor one, a
 fix a patch. Every change gets a line here, so an app can see what moved before it updates.
 
+## 0.21.0: every app's chat can draw the hub's screens (2026-11-24)
+
+- `Hub.screens(for:)`: what a chat turn passes as `supportedCatalogIds`, the Glyph catalog unless that
+  surface is answered by a local open model (which broke every turn when offered screens).
+- `[ChatEntry].drawing(_:)`: puts the plan's A2UI screen under the turn's first line, dropping one
+  with nothing to draw. `ChatModel.lines` uses it, so Glyph X's screens behave as before.
+- `GlyphTag.count`: how many app entries are filed under a tag, as the hub counts them from the files
+  (`/crm/names`). Nil when not known.
+
+## 0.20.0: every top line fits, and the shared sheets say whose they are (2026-11-24)
+
+- `GlyphHeaderLine(app:page:home:mark:)`: the top line's one layout, for any mark. Where the full
+  line (mark, app name, dot, page name) does not fit, as between a sheet's Cancel and Save on an
+  iPhone SE or at the largest text, it drops the app's words and keeps the mark and the whole page
+  name, instead of cutting the page name. `GlyphPageHeader` draws through it.
+- `GlyphApp` and `\.glyphApp`: which app this is (name, mark, tint, or a drawn mark), set once by
+  the shell beside `\.glyphHome`.
+- `GlyphSheetTitle(_:)`: a shared sheet's title, the app's top line when `\.glyphApp` is set. Used
+  by the New tag / Edit tag form and Past chats, which showed a plain title in every app.
+
+## 0.19.2: the app's name in the top line never wraps (2026-11-23)
+
+`GlyphPageHeader` keeps the app's name on one line (`lineLimit(1)`, `fixedSize`); in a narrow
+principal slot (Glyph Jot's tag page, with Back and a menu either side) "Glyph Jot" broke onto
+two lines. The page's name is the part that shrinks.
+
+## 0.19.1: Glyph Native holds every tag (2026-11-23)
+
+- `GlyphTag.belongs(to: "native")` is true for every tag, as for Glyph CRM and Glyph Jot: Native's chat sends to any
+  app, so its drawer lists them all.
+
+## 0.19.0: the drawer's tags can carry counts, an order and a menu (2026-11-23)
+
+- `GlyphDrawerTags(counts:order:menu:extra:)`: a count per tag at the row's end, the app's own order (Glyph Jot's
+  Edit Order), what a long press offers (Jot's rename, describe, delete) and one more row under the tags. All
+  optional; nothing changes for an app that passes none.
+
+## 0.18.1: the drawer's tag heading has its own name (2026-11-23)
+
+- `GlyphDrawerTags` heading is `drawer.tagsection` (and `drawer.tagsection.manage`): `drawer.tags` is every app's
+  Tags place row, and two elements answering to one name made checks tap the wrong one.
+
+## 0.18.0: chat with a tag from its page (2026-11-23)
+
+- `GlyphTagComposer(tag:tint:)`: the family composer at the foot of a tag's page; what is said goes to the app's
+  chat as the next turn with that tag (`ChatModel.say(_:tag:)`). The shell sets two environment values:
+  `glyphAskInChat` (store the words, show the chat) and `glyphChatAsk` (the binding `GlyphChat` reads and clears).
+  Fru: "when I click on the tag, I can just chat or interact with that tag."
+
+## 0.17.0: the tags in every drawer (2026-11-23)
+
+- `GlyphDrawerTags(app:tint:here:open:)`: every tag the app holds (`GlyphTags.forApp`), listed in the drawer under
+  the places, open by default; its heading folds it away and the phone keeps that choice per app. A tag hands the
+  app its `GlyphTag` to open that tag's page. Every app but Glyph CRM ends the list with Manage tags, which opens
+  `glyph-crm://tags`. Fru: "I should see the chat, the app, and then the tags visible, showing all on the side,
+  expanded. And then I can choose to collapse it or not."
+- `GlyphDrawer(tags:)` draws it; a drawer an app still draws itself embeds the same view.
+
+## 0.16.0: the composer can hold a screen's words, and send files alone (2026-11-23)
+
+- `GlyphComposer(text:)` keeps the field and a screen's own string as one, so a screen can put words in the
+  box (Glyph Bot's phone chat: a message that never reached the Mac comes back; words said on its home screen
+  wait in an agent's box). nil, the default, changes nothing.
+- `GlyphComposer(ready:)`: something besides words is waiting (Bot's attached files), so the send arrow shows
+  with the field empty and sends an empty sentence for the screen to fill in.
+
+## 0.15.1: a Well line keeps its place for Glyph CRM (2026-11-23)
+
+- `WellLine.log(where:)` writes the place's name to `from`, as Glyph Well does, beside `lat` and `lon`. In
+  a Well line `place` is a Glyph CRM id (Labs groups results by it); 0.14.0 put a street name there.
+
+## 0.15.0: Time's lines carry a place; six decimals, and a fix at the deadline (2026-11-23)
+
+- `TimeEvent` has `place`, `lat`, `lon` (optional, Codable; old lines read as before) and its init takes
+  `where:`, so Glyph Time's timers, alarms and reminders can say where they were set.
+- `Where.fields` writes the coordinates as decimals: a Double through JSONSerialization could print
+  36.123457000000002.
+- `GlyphPlace.fix(within:)` answers the best fix seen so far at the deadline rather than none, so a short
+  wait indoors (no 50 m fix) still gets a place.
+
+## 0.14.1: an agent's item names the device alone, and its memo says where (2026-11-23)
+
+- `Hub.device` is the model ("iPhone 15 Pro", the Mac's name), as every app writes `device`; it was
+  "<app>, <model>". Every agent line and memo changes with it.
+- `MacHub.memo` writes `place`, `lat`, `lon` beside `device`, byte for byte the hub's save() (place quoted,
+  6 decimals), so an agent's memo on the Mac carries `Hub.place` as the phone's does through the hub.
+
+## 0.14.0: every line says where it was saved (2026-11-23)
+
+Fru, 2026-11-23: "Location and device is for all apps and desktop."
+- New `Where` (GlyphVault): `place` (the name, left out when the lookup had none), `lat`, `lon` (6
+  decimals). `Where.stamp` adds them to a line, `Where(_:)` reads them back, `Where.shown(device:place:)`
+  is the line an item's screen shows ("iPhone 17 Pro · Elm Street, Springfield"), from the item's own record.
+- `WellLine.log`, `WealthLine.log`, `LifeLine.decide`/`start`, `TravelLine.plan`/`note` and `JotMemo.body`
+  take `where:` (nil writes nothing, as before). A trip line takes none: its `place` is where the trip goes.
+- `Hub.place`: set it for a turn and every tool's line carries it.
+- `GlyphPlace` builds on the Mac too, and `GlyphPlace.here(within:)` gives a named `Where` or nil. A Mac app
+  needs `NSLocationUsageDescription` (and, sandboxed, `com.apple.security.personal-information.location`).
+
+## 0.13.0: the app's name in the top line goes home (2026-11-23)
+
+- New `\.glyphHome` environment value (GlyphCapture): an app's shell sets it once, to go to its home
+  screen. `GlyphPageHeader` and `GlyphAppMark` (so `GlyphAppHeader`) read it; `GlyphPageHeader` also
+  takes `home:` directly. Unset, both draw exactly as before.
+- When set, the mark and the app's name are one button, `GlyphHomeButton` (public, for an app's own
+  top line): identifier `chrome.home`, label "<App>, home", hint "Goes to the home screen", 44 points
+  tall at least. The page's name stays plain text; `glyph.page` stays the line's identifier and label.
+
+## 0.12.0: tags live in data/tags (2026-11-22)
+
+The vault's `data/domains/` moved to `data/tags/` and each tag page into its folder
+(`data/tags/<x>/entity.md`); `data/domains` and `data/entities/tags` stay as links to it.
+- New `TagFolders` (GlyphVault): `root(vault, old:)` is the folder to write in (`data/tags`, the old
+  one in a vault not moved yet), `tag(of:)` reads the tag off a path under either name.
+- GlyphTags reads and writes pages in `data/tags`; a folder with no page is no tag.
+- MacHub writes memos to `data/tags`, lists tag rows from it in crm/names, and its writable,
+  movable and Omega checks accept both names. CrossLink's places are `data/tags/<x>`.
+- Filer's backfill reads the domain off a path under either name, and `backfill("data/domains")` walks data/tags.
+- A URL listing of a link is empty (`contentsOfDirectory(at:)`, `enumerator(at:)`), so StudioDirectory
+  reads a linked folder where it points (Glyph Bot's domains were empty on a moved vault), and
+  Filing's index walks data/tags rather than under the link. MacHub's crm/names tag rows keep the
+  path `data/entities/tags/<slug>/entity.md`, which every names reader parses.
+
+## 0.11.0: generative UI, A2UI 1.0 drawn by GlyphCore (2026-11-22)
+
+- GlyphCapture `A2UI`, `A2UIStream`, `A2UISurface`, `A2UIAction` and `A2UISurfaceView(surface:tint:onAction:)`: Google's
+  A2UI 1.0 messages (createSurface, updateComponents, updateDataModel, deleteSurface; `{"@path"}` bindings; the
+  `action` message back) drawn by our own SwiftUI on iOS and macOS, in the Glyph catalog `dev.fru.glyph/catalog/v1`
+  (Basic Catalog parts plus Place, DayStrip, Chart, TodoItem, TagChip). Parts and properties: `Sources/GlyphCapture/A2UI.md`.
+  Unknown parts draw nothing and are logged; children not yet arrived draw as placeholders. Five invented fixtures
+  (`A2UIFixtures`), tests in `A2UITests`, a demo harness `Harness/A2UIDemo` and `scripts/a2ui-shots.sh`.
+- GlyphAI `ChatPlan.a2ui` (the hub's checked messages), `Hub.understand(..., supportedCatalogIds:)` (sent per turn as
+  `a2uiRendererCapabilities`) and `Hub.answer(action:surface:history:)` (POST /a2ui/action). `JSONValue` is public.
+- GlyphChat: `ChatEntry.surfaces` drawn under the line, `ChatModel.onAction` and `ChatModel.act(_:)`;
+  `ChatModel.lines(for:hub:app:)` puts a plan's screen on its first line. An app that asks for no catalog sees no change.
+
 ## 0.10.1: the first talk no longer crashes (2026-10-31)
 
 - GlyphCapture `LiveDictation`: speech recognition permission is asked in `speechAuthorized()`,

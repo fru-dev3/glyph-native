@@ -29,6 +29,25 @@ public struct GlyphTagHash: View {
 
     nonisolated public static func color(_ name: String) -> Color { palette[index(name, of: palette.count)] }
 
+    /// The tags at the head of a row's quiet line, each as "#Name" in its own colour, up to
+    /// `most`, then "+N": how Glyph Jot has always said what a jot is filed under, on the row
+    /// itself (`MemoRow.tagHead`), and how Glyph Wealth writes a category. Shared so the third app
+    /// to draw it (Glyph Well, 2026-11-21) does not carry a third copy; Jot's and Wealth's are the
+    /// ones to move onto this next.
+    ///
+    /// Each name is written in proper case, in the register's spelling (`GlyphTags.display`), so
+    /// a caller passes the tag as it is stored. `dot` follows each one, in
+    /// the tag's colour as Jot draws it, for a line that carries on with a time or a detail; a
+    /// line that is the tags alone passes spaces.
+    nonisolated public static func line(_ names: [String], most: Int = 2, dot: String = "  \u{00B7}  ") -> Text {
+        var text = Text("")
+        for name in names.prefix(most) {
+            let tag = Text("#\(GlyphTags.display(name))\(dot)").fontWeight(.semibold).foregroundStyle(GlyphTags.color(name))
+            text = Text("\(text)\(tag)")
+        }
+        return names.count > most ? Text("\(text)+\(names.count - most)\(dot)") : text
+    }
+
     public var body: some View {
         // The register's colour first, so a tag is the same colour in every app; then one an app
         // passed in; then the hash, for a tag made a second ago that the vault has not seen yet.

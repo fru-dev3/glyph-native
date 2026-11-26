@@ -77,8 +77,11 @@ public struct GlyphTagPicker: View {
             .padding(.horizontal, 14).frame(height: 44)
             .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 14, style: .continuous))
 
-            Text(typed.trimmingCharacters(in: .whitespaces).isEmpty
-                 ? "Your tags \u{00b7} \(tags.count)" : "\(matching.count) of \(tags.count)")
+            // How many are picked, beside how many there are (Fru, 2026-11-24: "Show number of
+            // selected tags"): with several picked and the list long, the ticks scroll out of sight.
+            Text((typed.trimmingCharacters(in: .whitespaces).isEmpty
+                  ? "\(mark == .domain ? "Your domains" : "Your tags") \u{00b7} \(tags.count)" : "\(matching.count) of \(tags.count)")
+                 + (on.isEmpty ? "" : " \u{00b7} \(on.count) selected"))
                 .font(.system(size: 11.5, weight: .semibold)).tracking(0.5).textCase(.uppercase)
                 .foregroundStyle(tint)
                 .accessibilityIdentifier("tag.count")
@@ -103,6 +106,13 @@ public struct GlyphTagPicker: View {
         }
     }
 
+    /// A tag is written in proper case, as everywhere a tag is drawn; a row that is not a tag
+    /// (a vault domain) is written as given.
+    private func shown(_ name: String) -> String {
+        if case .tag = mark { return GlyphTags.display(name) }
+        return name
+    }
+
     /// The family's `#` for a tag, and a plain mark for rows that are not tags: the hash means
     /// one thing across the apps or it means nothing.
     @ViewBuilder private func leadingMark(_ name: String) -> some View {
@@ -123,7 +133,7 @@ public struct GlyphTagPicker: View {
             HStack(alignment: .top, spacing: 10) {
                 leadingMark(t.name)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(t.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(.primary)
+                    Text(shown(t.name)).font(.system(size: 15, weight: .semibold)).foregroundStyle(.primary)
                     if let covers = t.covers, !covers.isEmpty {
                         Text(covers).font(.system(size: 12)).lineSpacing(4).foregroundStyle(.secondary).lineLimit(2)
                     }
@@ -137,7 +147,7 @@ public struct GlyphTagPicker: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("tag." + t.id)
-        .accessibilityLabel(t.name)
+        .accessibilityLabel(shown(t.name))
         .accessibilityAddTraits(here ? .isSelected : [])
     }
 }

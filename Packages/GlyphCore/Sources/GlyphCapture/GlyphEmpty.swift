@@ -56,7 +56,7 @@ public struct GlyphEmpty: View {
                     .font(.subheadline.weight(.semibold))
                     .tint(tint)
                     .padding(.top, 4)
-                    .accessibilityIdentifier(probe)
+                    .glyphProbe(probe)
             }
         }
         .frame(maxWidth: .infinity).padding(.vertical, 30)

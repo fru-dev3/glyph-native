@@ -49,6 +49,25 @@ extension DictateTests {
         #expect(d.text == "one two three four five six seven eight" && !d.paused)
         d.stop()
     }
+
+    /// The talk screen draws the settled words in ink and the rest in grey, and its timer stands
+    /// still through a pause: both read off the take.
+    @Test func settledWordsLeadAndAPauseStopsTheClock() async throws {
+        UserDefaults.standard.set("one two three four five six seven eight", forKey: "glyphDictationText")
+        defer { UserDefaults.standard.removeObject(forKey: "glyphDictationText") }
+        let d = LiveDictation()
+        d.start()
+        for _ in 0..<40 where d.text.split(separator: " ").count < 6 { try await Task.sleep(for: .milliseconds(20)) }
+        d.pause()
+        #expect(d.pausedAt != nil)
+        #expect(!d.settled.isEmpty && !d.pending.isEmpty && d.settled + d.pending == d.text)
+        let began = d.startedAt!
+        try await Task.sleep(for: .milliseconds(200))
+        d.resume()
+        #expect(d.pausedAt == nil && d.startedAt! > began.addingTimeInterval(0.15))
+        d.stop()
+        #expect(d.pending.isEmpty && d.settled == d.text)
+    }
 }
 
 /// The real on-device model, hearing a spoken recording made with `say` (no injected words).

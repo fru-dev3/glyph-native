@@ -349,6 +349,8 @@ public struct Filer: Sendable {
     public func backfill(_ folder: String, inPlace: Bool, report: String?, limit: Int = .max,
                          progress: (@Sendable (Int, Int) -> Void)? = nil) async -> String {
         let fm = FileManager.default
+        // A walk from a link (data/domains since 2026-11-22) finds nothing, so the old name reads the new folder.
+        let folder = folder == "data/domains" ? TagFolders.root(filing.root) : folder
         let pdfs = Self.pdfs(under: filing.root.appending(path: folder), root: filing.root)
         let domains = filing.domains(), rules = filing.rules()
         var rows: [(rel: String, rec: FilingRecord?, note: String)] = []
@@ -362,8 +364,7 @@ public struct Filer: Sendable {
             if inPlace, fm.fileExists(atPath: filing.root.appending(path: mdRel).path) { rows.append((rel, nil, "skipped: a note of the same name exists")); continue }
             guard let read = try? await read(filing.root.appending(path: rel)) else { rows.append((rel, nil, "unreadable")); continue }
             let model = useModel ? await DocumentReader.modelRead(read.text, parts: 1) : nil
-            let parts = rel.split(separator: "/")
-            let here = parts.count > 2 && parts[0] == "data" && parts[1] == "domains" ? String(parts[2]) : nil
+            let here = TagFolders.tag(of: rel)
             var r = decide(read, Request(path: filing.root.appending(path: rel), source: "backfill", device: ThisDevice.name, dryRun: !inPlace),
                            rules: rules, domains: domains, model: model)
             r.sha256 = Filing.sha256((try? Data(contentsOf: filing.root.appending(path: rel))) ?? Data())

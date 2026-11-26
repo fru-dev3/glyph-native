@@ -142,8 +142,13 @@ public extension View {
     /// NavigationStack) get a bottom margin so their last rows scroll clear of it, and it rides up
     /// with the keyboard, because it is now the thing the keyboard is for. `page` is the colour the
     /// row's ground uses: a grouped or tinted page passes its own, or a lighter band shows behind it.
+    /// The placeholder is "Say what happened", not "Say or type what happened": the field is 180
+    /// points wide on a 402-point phone (measured off the accessibility tree, not guessed), and the
+    /// longer line runs past it and is cut. The field already shows a keyboard when tapped and a
+    /// mic beside it, so the words "or type" were teaching what the two controls say themselves
+    /// (Fru, 2026-11-18, of the family's phone screens).
     func talkButton(tint: Color = Color(red: 0, green: 128 / 255, blue: 0),
-                    placeholder: String = "Say or type what happened",
+                    placeholder: String = "Say what happened",
                     page: Color = .talkPage,
                     attach: (() -> Void)? = nil,
                     onFinal: @escaping @MainActor (String) async -> Void) -> some View {

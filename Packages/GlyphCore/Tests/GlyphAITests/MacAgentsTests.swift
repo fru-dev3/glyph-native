@@ -62,7 +62,7 @@ private func text(_ vault: URL, _ rel: String) -> String? { try? String(contents
     let done = try await GlyphAgent.jot.call("new_note", json: #"{"text":"  Ken Lee: call Acme/West\n second line ","tags":["Dreams","Task","Real  Estate","Dreams"]}"#, hub: hub)
     #expect(done.map { $0.card["status"] as? String } == ["done"])
     // What the hub's inbox save() wrote for the same memo (career exists but isn't tagged; real-estate doesn't exist).
-    let head = "---\ndate: 2026-10-30T08:10:00\ntags: [\"Dreams\", \"Task\", \"Real Estate\"]\nkind: voice\ndevice: Glyph agents, Mac\nsource: jot\n"
+    let head = "---\ndate: 2026-10-30T08:10:00\ntags: [\"Dreams\", \"Task\", \"Real Estate\"]\nkind: voice\ndevice: Mac\nsource: jot\n"
     let body = "---\n\nKen Lee: call Acme/West\n second line\n"
     #expect(text(vault, "data/domains/notes/source/jot/2026-10-30 08-10-00.md") == head + body)
     #expect(text(vault, "data/domains/dreams/source/jot/2026-10-30 08-10-00.md") == head + "original: notes/source/jot/2026-10-30 08-10-00.md\n" + body)
@@ -70,6 +70,19 @@ private func text(_ vault: URL, _ rel: String) -> String? { try? String(contents
     #expect(text(vault, "data/domains/dreams/memory/tasks.md") == "# Tasks\n- [ ] Ken Lee: call Acme/West +2026-10-30 [src jot 2026-10-30 08-10-00]\n")
     _ = try await GlyphAgent.jot.call("new_note", json: #"{"text":"Ken Lee: call Acme/West","tags":["Dreams","Task"]}"#, hub: hub)
     #expect(text(vault, "data/domains/dreams/memory/tasks.md")?.components(separatedBy: "[src jot").count == 2, "a task once")
+}
+
+/// An agent's memo says where it was saved, as the hub writes it: the device alone, place quoted, lat/lon to 6 decimals.
+@Test func agentMemoCarriesDeviceAndPlace() async throws {
+    let vault = try tempVault(), plain = macHub(vault)
+    defer { try? FileManager.default.removeItem(at: vault) }
+    var hub = plain
+    hub.place = Where(place: "Elm Street, Springfield", lat: 44.9777531, lon: -93.265)
+    _ = try await GlyphAgent.jot.call("new_note", json: #"{"text":"Gym at six","tags":[]}"#, hub: hub)
+    #expect(text(vault, "data/domains/notes/source/jot/2026-10-30 08-10-00.md")?.contains(
+        "device: Mac\nplace: \"Elm Street, Springfield\"\nlat: 44.977753\nlon: -93.265000\nsource: jot\n") == true)
+    let line = WellLine.log(id: "a", kind: "mood", name: "Calm", said: "calm", at: hub.now(), host: hub.host, device: hub.device, where: hub.place)
+    #expect(line.contains(#""device":"Mac""#) && line.contains(#""from":"Elm Street, Springfield""#))
 }
 
 @Test func wellLineGoesInThisMacsMonthFile() async throws {
@@ -242,6 +255,28 @@ private func sha(_ s: String) -> String { Filing.sha256(Data(s.utf8)) }
     #expect(move("data/entities/people/ken-lee", "data/domains/x") == 403)
     #expect(move("data/entities/people/nobody", "data/entities/_merged/people/nobody") == 409)
     #expect(move("data/domains/notes/source/jot/a.md", "data/apps/crm/undone/a.md") == 403)
+}
+
+// The vault as moved on 2026-11-22: the tag folders in data/tags (the old two names links to it, which a
+// walk that skips links never shows). Writes go to data/tags, and either name is read and accepted.
+@Test func tagsFolderIsWhereTheHubWrites() async throws {
+    let vault = FileManager.default.temporaryDirectory.appending(path: "glyph-mac-tags-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: vault) }
+    for d in ["notes", "dreams"] { try FileManager.default.createDirectory(at: vault.appending(path: "data/tags/\(d)/memory"), withIntermediateDirectories: true) }
+    try put(vault, "data/tags/dreams/entity.md", "---\nname: \"Dreams\"\nkind: tag\nid: tags/dreams\n---\n")
+    #expect(TagFolders.root(vault) == "data/tags" && TagFolders.root(vault, old: "data/entities/tags") == "data/tags")
+    #expect(TagFolders.tag(of: "data/tags/dreams/source/x.md") == "dreams" && TagFolders.tag(of: "data/domains/dreams/x.md") == "dreams")
+    #expect(TagFolders.tag(of: "data/entities/people/x/entity.md") == nil)
+    let hub = macHub(vault)
+    _ = try await GlyphAgent.jot.call("new_note", json: #"{"text":"Flew again.","tags":["Dreams"]}"#, hub: hub)
+    #expect(text(vault, "data/tags/notes/source/jot/2026-10-30 08-10-00.md")?.contains("Flew again.") == true)
+    #expect(text(vault, "data/tags/dreams/source/jot/2026-10-30 08-10-00.md")?.contains("original: notes/") == true)
+    let m = MacHub(vault: vault)
+    let tags = m.crmNames().filter { $0["kind"] as? String == "tag" }
+    #expect(tags.map { $0["path"] as? String } == ["data/entities/tags/dreams/entity.md"], "notes has no page, so it is no tag; the path every names reader parses")
+    #expect(MacHub.writable("data/tags/dreams/memory/tasks.md") && MacHub.writable("data/domains/dreams/memory/tasks.md"))
+    #expect(MacHub.movable("data/tags/notes/source/crm/a.md", "data/apps/crm/undone/a.md"))
+    #expect(CrossLink.places(in: vault).contains { $0.path == "data/tags/dreams" && $0.kind == "domain" })
 }
 
 // Preferences (Glyph Omega's ## Preferences): each agent is told the ones in its scopes; Omega adds and archives them;
@@ -425,4 +460,63 @@ private func sha(_ s: String) -> String { Filing.sha256(Data(s.utf8)) }
     // Empty words are still refused, so a mis-heard take does not write a blank note.
     let nothing = await hub.travelNote("   ", trip: "")
     #expect(!nothing.ok)
+}
+
+// Hours told after the fact are Time's, as one whole session; a length nobody said is never written.
+@Test func timeLogsHoursToldAfterTheFact() async throws {
+    let vault = try tempVault(), hub = macHub(vault)
+    let done = try await GlyphAgent.time.call("log_hours", json: #"{"minutes":120,"project":"tax prep","when":""}"#, hub: hub)
+    #expect(done.first?.ok == true && done.first?.line == "Logged 2 h on tax prep.", "\(done)")
+    let events = TimeLog.read(vault.appending(path: "data/apps/time/sessions"), months: ["2026-10"])
+    let s = try #require(TimeLog.sessions(events).first)
+    #expect(s.project == "tax prep" && s.source == "said" && s.active(at: hub.now()) == 7200 && s.end == hub.now())
+    // A timer running on the same device is neither closed by it nor closes it.
+    let open = TimeEvent("start", at: hub.now().addingTimeInterval(-1800), host: "laptop-local", project: "deck")
+    let both = TimeLog.sessions(events + [open])
+    #expect(both.count == 2 && both.contains { $0.project == "deck" && $0.end == nil } && both.contains { $0.project == "tax prep" && $0.end != nil })
+    let none = try await GlyphAgent.time.call("log_hours", json: #"{"minutes":0,"project":"tax prep","when":""}"#, hub: hub)
+    #expect(none.first?.ok == false && none.first?.line == "How long did you spend on tax prep?")
+    let yesterday = try await GlyphAgent.time.call("log_hours", json: #"{"minutes":45,"project":"the deck","when":"yesterday at 5 pm"}"#, hub: hub)
+    #expect(yesterday.first?.ok == true)
+    let y = TimeLog.sessions(TimeLog.read(vault.appending(path: "data/apps/time/sessions"), months: ["2026-10"])).first { $0.project == "the deck" }
+    #expect(y.map { Calendar.current.component(.hour, from: $0.end!) } == 17 && y?.active(at: hub.now()) == 2700)
+}
+
+// A renewal said to Life lands on its own lines with the day read forward and only the amount said.
+@Test func lifeAddsARenewalOnTheDaySaid() async throws {
+    let vault = try tempVault(), hub = macHub(vault)
+    let done = try await GlyphAgent.life.call("add_renewal",
+        json: #"{"what":"Car registration","when":"March 3","amount":120,"rough":true,"domain":"records"}"#, hub: hub)
+    #expect(done.first?.ok == true && done.first?.line == "Car registration renews March 3, 2027, about $120.", "\(done)")
+    let file = try #require(text(vault, "data/apps/life/entries/2026-10.laptop-local.jsonl"))
+    let o = try #require(try JSONSerialization.jsonObject(with: Data(file.utf8)) as? [String: Any])
+    #expect(o["event"] as? String == "renewal" && o["on"] as? String == "2027-03-03" && o["amount"] as? Double == 120
+            && o["rough"] as? Bool == true && o["domain"] as? String == "records" && o["what"] as? String == "Car registration")
+    let noAmount = try await GlyphAgent.life.call("add_renewal",
+        json: #"{"what":"Passport","when":"2027-04-12","amount":0,"rough":false,"domain":"travel"}"#, hub: hub)
+    #expect(noAmount.first?.line == "Passport renews April 12, 2027.")
+    #expect(!(text(vault, "data/apps/life/entries/2026-10.laptop-local.jsonl") ?? "").split(separator: "\n").last!.contains("amount"))
+    let guessed = try await GlyphAgent.life.call("add_renewal",
+        json: #"{"what":"Gym","when":"next month","amount":0,"rough":false,"domain":"general"}"#, hub: hub)
+    #expect(guessed.first?.ok == false && guessed.first?.line == "When does Gym renew?")
+}
+
+@Test func startRoutineKeepsOneAndStopEndsIt() async throws {
+    let vault = try tempVault(), hub = macHub(vault)
+    let made = await hub.startRoutine(name: "vitamin D", kind: "med", days: [], time: "morning", dose: "", since: "2026-10-21", until: "")
+    #expect(made.ok, "\(made.line)")
+    // Said again with a dose: the same routine, updated, not a second one.
+    let again = await hub.startRoutine(name: "Vitamin D", kind: "med", days: [], time: "8 am", dose: "2000 IU", since: "", until: "")
+    #expect(again.ok && again.line.contains("updated"))
+    var list = await hub.routines()
+    #expect(list.count == 1 && list[0].kind == "med" && list[0].dose == "2000 IU" && list[0].time != nil)
+    #expect(Calendar.current.component(.day, from: list[0].since!) == 21, "the start said first is kept")
+    let gym = await hub.startRoutine(name: "gym", kind: "workout", days: ["Monday", "wed", "fri"], time: "6 am", dose: "", since: "", until: "")
+    #expect(gym.ok && gym.line.contains("Mon, Wed, Fri"))
+    let stop = await hub.stopRoutine(name: "the vitamin d")
+    #expect(stop.ok, "\(stop.line)")
+    list = await hub.routines()
+    #expect(list.first { $0.title == "Vitamin D" }?.active() == false && list.first { $0.title == "Gym" }?.active() == true)
+    let none = await hub.stopRoutine(name: "yoga")
+    #expect(!none.ok)
 }

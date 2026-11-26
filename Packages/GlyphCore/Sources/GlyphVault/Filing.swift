@@ -210,7 +210,8 @@ public struct Filing: Sendable {
     public func index() -> [FiledNote] {
         var out: [FiledNote] = []
         let fm = FileManager.default
-        var roots = domains().flatMap { ["data/domains/\($0)/source", "data/domains/\($0)/memory"] }
+        let tags = TagFolders.root(root)  // never through the data/domains link: a walk under one reports the far side
+        var roots = domains().flatMap { ["\(tags)/\($0)/source", "\(tags)/\($0)/memory"] }
         roots.append(Self.app + "/review")
         for r in roots {
             guard let walker = fm.enumerator(at: url(r), includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) else { continue }

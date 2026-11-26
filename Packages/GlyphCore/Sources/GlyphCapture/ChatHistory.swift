@@ -73,6 +73,10 @@ public struct ChatHistorySheet: View {
                 }
             }
             .navigationTitle("Past chats")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .principal) { GlyphSheetTitle("Past chats") } }
+            #endif
         }
         .tint(tint)
         .presentationDragIndicator(.visible)

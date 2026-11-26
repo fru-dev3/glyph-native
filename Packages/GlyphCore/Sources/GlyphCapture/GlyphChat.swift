@@ -33,6 +33,9 @@ public struct ChatEntry: Identifiable {
     /// chat. Is it Claude? Because in the future I can maybe change to Gemini or Codex"). Nil for
     /// a line the app wrote itself, which has no engine behind it to name.
     public var who: String?
+    /// A screen with the answer (A2UI, `A2UISurfaceView`), drawn under the line; what is done on it goes to
+    /// `ChatModel.onAction`.
+    public var surfaces: [A2UISurface] = []
 
     public init(mine: Bool = false, text: String, kind: Kind = .card, detail: String? = nil, done: Bool = false, working: Bool = false,
                 mood: FaceMood? = nil, undo: (@MainActor () -> Void)? = nil, link: URL? = nil, save: (@MainActor () async -> ChatEntry)? = nil,
@@ -62,6 +65,10 @@ public struct ChatEntry: Identifiable {
     @ObservationIgnored public var respond: @MainActor (String, [ChatTurn]) async -> [ChatEntry]?
     /// Past chats (optional): each turn is saved here, and the screen shows the history button.
     @ObservationIgnored public var log: ChatLog?
+    /// What a screen in the chat sent back (an A2UI action) and the turns so far, answered like `respond`; nil
+    /// leaves the screens' buttons doing nothing but their local changes. Typically
+    /// `{ a, turns in await hub.answer(action: a.message, surface: app, history: turns).map { await ChatModel.lines(for: $0, hub: hub, app: app) } }`.
+    @ObservationIgnored public var onAction: (@MainActor (A2UIAction, [ChatTurn]) async -> [ChatEntry]?)?
     @ObservationIgnored public var device: String?
     public private(set) var chatID = ChatLog.newID()
 
@@ -74,9 +81,15 @@ public struct ChatEntry: Identifiable {
         entries.filter { !$0.working }.map { ChatTurn(mine: $0.mine, text: $0.mine ? $0.text : ($0.detail ?? $0.text)) }
     }
 
+    /// The tag picked with the composer's `#` for the words being answered, by slug, while
+    /// `respond` runs: an app reads it at the start of its `respond` and passes it to
+    /// `understand(..., tag:)`. The composer clears its chip as soon as the words leave it, which
+    /// is before this turn starts, so the pick has to travel with the words (2026-11-21).
+    public private(set) var tag: String?
+
     /// Mine, then the working line, then what the app did. Returns the app's entries.
     @discardableResult
-    public func say(_ words: String) async -> [ChatEntry] {
+    public func say(_ words: String, tag: String? = nil) async -> [ChatEntry] {
         let said = words.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !said.isEmpty else { return [] }
         let before = turns
@@ -85,7 +98,10 @@ public struct ChatEntry: Identifiable {
             entries.append(ChatEntry(text: working, working: true, mood: .thinking))
         }
         let slot = entries[entries.count - 1].id
-        guard let got = await respond(said, before) else {
+        self.tag = tag
+        let answer = await respond(said, before)
+        self.tag = nil
+        guard let got = answer else {
             keep(said)
             let off = [ChatEntry(text: Self.offline, mood: .rest)]
             withAnimation(.snappy) { if let i = entries.firstIndex(where: { $0.id == slot }) { var e = off[0]; e.id = slot; entries[i] = e } }
@@ -101,6 +117,31 @@ public struct ChatEntry: Identifiable {
         let mine = Set(got.dropFirst().map(\.id) + [slot])
         for e in entries where e.then != nil && mine.contains(e.id) { finish(e) }
         return got
+    }
+
+    /// A screen's action as the next turn: what was chosen as my line (the button's words), the working line,
+    /// then the answer, which may carry the next screen.
+    public func act(_ action: A2UIAction) async {
+        // The screen it came from, which holds its buttons in their sent state until this answers.
+        let from = entries.reversed().lazy.flatMap(\.surfaces).first { s in
+            if s.id == action.surfaceId, case .sending = s.sent { return true } else { return false }
+        }
+        guard let onAction else { from?.cancelSend(); return }
+        let before = turns
+        withAnimation(.snappy) {
+            if let said = action.userMessage, !said.isEmpty { entries.append(ChatEntry(mine: true, text: said)) }
+            entries.append(ChatEntry(text: working, working: true, mood: .thinking))
+        }
+        let slot = entries[entries.count - 1].id
+        let answer = await onAction(action, before)
+        let got = answer ?? [ChatEntry(text: "Can't reach Glyph right now.", mood: .rest)]
+        withAnimation(.snappy) {
+            from?.answered(answer?.first?.text, failed: answer == nil)
+            guard let i = entries.firstIndex(where: { $0.id == slot }) else { return }
+            if var first = got.first { first.id = slot; entries[i] = first; entries.insert(contentsOf: got.dropFirst(), at: i + 1) }
+            else { entries.remove(at: i) }
+        }
+        persist()
     }
 
     /// A line still going (`then`): once it returns, its first line takes this one's place and the rest follow.
@@ -210,6 +251,9 @@ public struct GlyphChat: View {
     /// words, and open the keyboard.
     let bottom: ((@escaping (String) -> Void, @escaping () -> Void) -> AnyView)?
     @Environment(\.openURL) private var openURL
+    @Environment(\.glyphComposerTags) private var tagging
+    /// Words said on a tag's page, waiting to be said here with that tag (`GlyphTagComposer`).
+    @Environment(\.glyphChatAsk) private var ask
     @State private var opened: Set<UUID> = []
     @State private var talking = false
     @State private var showHistory = false
@@ -278,6 +322,16 @@ public struct GlyphChat: View {
                         .frame(height: 20).allowsHitTesting(false)
                 }
                 .onChange(of: model.entries.count) { _, _ in withAnimation { scroll.scrollTo(model.entries.last?.id, anchor: .bottom) } }
+                // And when the working line turns into its answer: the count does not change then, and after a
+                // screen's button (A2UI) the answer landed below the fold, out of sight (2026-11-22). A beat later,
+                // once the answer's row has its height; scrolled at once it measured the one-line working row.
+                .onChange(of: model.entries.last?.working) { _, working in
+                    guard working == false else { return }
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(250))
+                        withAnimation { scroll.scrollTo(model.entries.last?.id, anchor: .bottom) }
+                    }
+                }
                 .onChange(of: composing) { _, on in if on { withAnimation { scroll.scrollTo("fru-dots", anchor: .bottom) } } }
             }
             .background(Color(uiColor: .systemBackground))
@@ -285,6 +339,12 @@ public struct GlyphChat: View {
             .safeAreaInset(edge: .bottom, spacing: 0) { composer }
             .toolbar(.hidden, for: .navigationBar)
             .task { await model.resend() }
+            // A tag's page sent words here (`GlyphTagComposer`): say them as the next turn, with the tag.
+            .task(id: ask?.wrappedValue?.id) {
+                guard let a = ask?.wrappedValue else { return }
+                ask?.wrappedValue = nil
+                _ = await model.say(a.words, tag: a.tag)
+            }
             .sheet(isPresented: $showHistory) {
                 if let log = model.log { ChatHistorySheet(log: log, current: model.chatID, tint: tint) { model.reopen($0) } }
             }
@@ -352,7 +412,12 @@ public struct GlyphChat: View {
                              seed: FaceMood.seed(other?.id ?? agent), name: other?.name ?? name)
                         .padding(.bottom, 6)
                 }
-                reply(l)
+                VStack(alignment: .leading, spacing: 10) {
+                    reply(l)
+                    ForEach(l.surfaces) { s in
+                        A2UISurfaceView(surface: s, tint: tint) { a in Task { await model.act(a) } }
+                    }
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .springIn(from: .leading)
@@ -377,9 +442,12 @@ public struct GlyphChat: View {
         HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 if l.kind == .card || l.working {
-                    // One line that never wraps (cut short, not folded); the whole answer is on a tap.
+                    // Short, never a wall of text: the whole answer is on a tap. Two lines, not one,
+                    // because at 390 points one line cut a plain sentence mid-word -- "Can't reach
+                    // Glyph right now, saved to s..." lost the word that says what happened
+                    // (Fru, 2026-11-18). Two lines hold a status sentence and still cannot sprawl.
                     Text(l.text).font(.body.weight(l.done ? .semibold : .regular))
-                        .lineLimit(1).truncationMode(.tail).minimumScaleFactor(0.85)
+                        .lineLimit(2).truncationMode(.tail).minimumScaleFactor(0.85)
                         .accessibilityIdentifier("chat-reply")
                 } else {
                     // The answer's own characters, with the entities it names underlined and
@@ -460,7 +528,9 @@ public struct GlyphChat: View {
     }
 
     private func send(_ words: String) {
-        Task { _ = await model.say(words) }
+        // Read the pick now: the composer clears the chip once this returns.
+        let tag = tagging?.chosen.wrappedValue
+        Task { _ = await model.say(words, tag: tag) }
     }
 }
 #endif
