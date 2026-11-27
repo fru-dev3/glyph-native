@@ -1,7 +1,7 @@
 #if os(macOS)
 import SwiftUI
 
-/// The foot of every Glyph Mac app's sidebar: whether the vault is answering, in one line.
+/// The foot of every Glyph Mac app's sidebar: the gear (bottom left), and whether the vault is answering, in one line.
 ///
 /// Fru, 2026-11-15, going through the family app by app: "Where you paste showing that is connected
 /// to the vault should be consistent." Glyph Travel had this line, Glyph Wealth said it only inside
@@ -22,6 +22,7 @@ public struct GlyphSidebarFoot: View {
     private let says: String?
     private let waiting: Int
     private let action: (() -> Void)?
+    private let iphone: (app: String, link: URL)?
 
     /// - Parameters:
     ///   - live: true when the vault is reachable right now. Never a remembered answer.
@@ -31,7 +32,11 @@ public struct GlyphSidebarFoot: View {
     ///     that means something is not safe yet, so it is shown in the family's warm colour and
     ///     nothing is drawn when it is zero.
     ///   - action: where the line goes, normally the app's settings page.
-    public init(live: Bool, says: String? = nil, waiting: Int = 0, action: (() -> Void)? = nil) {
+    ///   - iphone: the app's name and its real iPhone install page; adds the iPhone icon at the end of the
+    ///     gear's line (the QR sheet, `GlyphGetPhoneRow`). Nil when the app has no public install page.
+    public init(live: Bool, says: String? = nil, waiting: Int = 0, iphone: (app: String, link: URL)? = nil,
+                action: (() -> Void)? = nil) {
+        self.iphone = iphone
         self.live = live
         self.says = says
         self.waiting = waiting
@@ -51,14 +56,33 @@ public struct GlyphSidebarFoot: View {
                     .accessibilityIdentifier("vault-waiting")
             }
         }
-        .padding(.horizontal, 18).padding(.top, 8).padding(.bottom, 14)
+        .padding(.horizontal, 18).padding(.vertical, 4)
         .contentShape(Rectangle())
         .accessibilityIdentifier("vault-foot")
 
-        if let action {
-            Button(action: action) { line }.buttonStyle(.plain).help("Your vault, in Settings")
-        } else {
-            line
+        // Two rows (Fru, 2026-11-27: make it "more compact as opposed to having 3 levels"): the coffee
+        // bar, then one line with the gear at the left, the vault in the middle and the iPhone at the right.
+        VStack(spacing: 0) {
+            GlyphSupportRow()
+            HStack(spacing: 0) {
+                if let action {
+                    Button(action: action) {
+                        Image(systemName: "gearshape").font(.system(size: 14, weight: .medium)).foregroundStyle(.secondary)
+                            .frame(width: 26, height: 26).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Settings")
+                    .glyphProbe("settings")
+                    .padding(.leading, 12)
+                    Button(action: action) { line.padding(.leading, -10) }.buttonStyle(.plain).help("Your vault, in Settings")
+                } else {
+                    line
+                }
+                if let iphone {
+                    GlyphGetPhoneRow(app: iphone.app, link: iphone.link, compact: true).padding(.trailing, 12)
+                }
+            }
+            .padding(.top, 4).padding(.bottom, 8)
         }
     }
 }

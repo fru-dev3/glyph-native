@@ -479,7 +479,7 @@ public struct GlyphComposer: View {
             }
             .padding(.leading, recording ? 16 : 2).padding(.trailing, 2)
             .background(Color(white: 0.17), in: RoundedRectangle(cornerRadius: Self.touch / 2, style: .continuous))
-            if (empty && !ready) || recording {
+            if ((empty && !ready) || recording) && GlyphMics.shown {
                 // The mic sits in the bar, not on a disc beside it. No second, round voice button:
                 // Fru has no realtime mode, so there is nothing for it to open.
                 //

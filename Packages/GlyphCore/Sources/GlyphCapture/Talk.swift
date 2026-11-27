@@ -9,6 +9,18 @@ import SwiftUI
 ///     TalkButton { words in log(words) }                  // the button alone, to place yourself
 ///
 /// Tests inject the words with `GLYPH_DICTATION_TEXT`. Accessibility identifier: `glyph.talk`.
+/// Whether this platform draws the family's mics. Not on the Mac (Fru, 2026-11-26: "Desktop doesn't
+/// make any sense because I already have Jot, I can text or type into any field easily"): Glyph Jot
+/// dictates into any field there, so a mic in an app is clutter. DictateButton, TalkButton,
+/// `.dictatable` and the composer's mic all ask this; an app never draws its own mic on the Mac.
+public enum GlyphMics {
+    #if os(macOS)
+    public static let shown = false
+    #else
+    public static let shown = true
+    #endif
+}
+
 public struct TalkButton: View {
     @State private var dictation = LiveDictation()
     @State private var levels: [Double] = Array(repeating: 0.04, count: 36)
@@ -24,6 +36,10 @@ public struct TalkButton: View {
     }
 
     public var body: some View {
+        if GlyphMics.shown { talk }
+    }
+
+    private var talk: some View {
         VStack(spacing: 10) {
             if let p = dictation.problem {
                 Text(p).font(.footnote).foregroundStyle(.red).multilineTextAlignment(.center).padding(.horizontal)

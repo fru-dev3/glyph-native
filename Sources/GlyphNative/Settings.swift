@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import NativeKit
+import GlyphCapture
 
 /// Where everything is: the vault, the hub it syncs through, and where apps are built from. Addresses come from
 /// ~/.config/glyph/env (personal setup, outside the repo); GLYPH_NATIVE_ENV points elsewhere in tests.
@@ -191,7 +192,10 @@ struct SettingsPage<Toggle: View>: View {
         }
         .buttonStyle(.plain).testFrame("settings.answers")
         heading("This Mac")
-        card { line("Installs apps from") { quiet("GitHub releases") } }
+        card {
+            line("Installs apps from") { quiet("GitHub releases") }
+            GlyphSupportToggle().padding(.top, 12)
+        }
         heading("About")
         Button { sub = .about } label: {
             card {

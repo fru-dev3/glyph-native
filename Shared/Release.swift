@@ -48,7 +48,7 @@ public enum Release {
         ReleasedApp(id: "jot", name: "Glyph Jot", job: "Personal context",
                     repo: "fru-dev3/glyph-jot", asset: "Glyph-Jot.dmg", macBundle: "dev.fru.jot.mac", group: "Layers"),
         ReleasedApp(id: "ibis", name: "Glyph Ibis", job: "What the world knows", group: "Layers", site: "https://glyph.fru.dev/ibis"),
-        ReleasedApp(id: "rig", name: "Glyph Rig", job: "Where your agents run", group: "Layers", site: "https://glyph.fru.dev/rig"),
+        ReleasedApp(id: "rig", name: "Glyph Rig", job: "Where your agents run", repo: "fru-dev3/glyph-native", asset: "Glyph-Rig.dmg", tag: "rig", macBundle: "dev.fru.rig", group: "Layers"),
         ReleasedApp(id: "arena", name: "Glyph Arena", job: "The best recipe for each task",
                     repo: "fru-dev3/glyph-arena", asset: "Glyph-Arena-mac-arm64.dmg", macBundle: "dev.fru.glyph.arena", group: "Tools"),
         ReleasedApp(id: "cast", name: "Glyph Cast", job: "Screen videos, cleaned up",

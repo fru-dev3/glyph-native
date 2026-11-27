@@ -16,7 +16,10 @@ import SwiftUI
 /// longer than two words wraps and turns a one-line header into three (Fru on Glyph Well's wrapped tagline,
 /// 2026-10-31: "this is too much text. come on. can you do good design?").
 ///
-/// The gear runs whatever the app gives it, and is deliberately not a `SettingsLink`: that opens the Settings
+/// The gear moved to the foot (`GlyphSidebarFoot`), bottom left, on 2026-11-26 (Fru: "the gear cannot be on the
+/// top left side there. It should usually be on the bottom left side."). `action` is kept so no app has to change;
+/// the foot's own action opens settings. What follows is still true of the gear where it is now:
+/// it runs whatever the app gives it, and is deliberately not a `SettingsLink`: that opens the Settings
 /// scene in a floating window, and configuration is a place you go to, not a thing that appears over you
 /// (Fru, 2026-10-31: "I don't want pop-up config pages... All these stupid pop-ups you're doing"). Each app
 /// shows its own settings in its content pane, like any other screen.
@@ -47,13 +50,6 @@ public struct GlyphSidebarHeader: View {
                 .frame(width: 30, height: 30)
             Text(name).font(.system(size: 15, weight: .semibold))
             Spacer(minLength: 0)
-            Button(action: action) {
-                Image(systemName: "gearshape").font(.system(size: 14, weight: .medium)).foregroundStyle(.secondary)
-                    .frame(width: 26, height: 26).contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("Settings")
-            .glyphProbe("settings")
         }
         .padding(.horizontal, 14).padding(.top, 4).padding(.bottom, 8)
     }

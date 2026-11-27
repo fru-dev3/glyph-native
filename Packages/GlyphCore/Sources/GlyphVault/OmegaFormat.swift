@@ -23,6 +23,9 @@ public struct OmegaGoal: Identifiable, Hashable, Sendable {
     public var why: String?
     public var done: Bool
     public var said: String? = nil   // ~said:<capture>: the spoken words it came from (data/apps/omega/captures/<capture>.md)
+    /// ~supports:<plan>/<id>: the goal or objective in someone else's plan this one serves (a company's, a family's),
+    /// <plan> being an imported plan's slug (data/apps/omega/plans/<plan>.xml). A reference, never a copy.
+    public var supports: String? = nil
     public var key: String { "\(domain)/\(id)" }
     public var isActive: Bool { !done && status == "active" }
 }
@@ -48,6 +51,20 @@ public struct OmegaCompassEntry: Identifiable, Hashable, Sendable {
     /// A preference's scope (design, writing, brand, agents...) and strength (soft unless said strong).
     public var scope: String { tokens["scope"] ?? "general" }
     public var strong: Bool { tokens["strength"] == "strong" }
+    /// The section it was read from: value, statement, vision, objective, goal, preference, role, nonneg, negotiable.
+    public var kind: String = ""
+    /// How firmly a rule holds, in OMG BMM 1.3's enforcement levels (OmegaFormat.enforcementLevels): its
+    /// ~enforcement: token, else the section's own default. Non-negotiables are strictly enforced, negotiables
+    /// bend with an explanation, a strong preference likewise, a soft one is a guideline. nil for what is not a rule.
+    public var enforcement: String? {
+        if let e = tokens["enforcement"], OmegaFormat.enforcementLevels.contains(e) { return e }
+        switch kind {
+        case "nonneg": return "strictly-enforced"
+        case "negotiable": return "override-with-explanation"
+        case "preference": return strong ? "override-with-explanation" : "guideline"
+        default: return nil
+        }
+    }
 }
 
 public struct OmegaCompass: Sendable {
@@ -59,6 +76,13 @@ public struct OmegaCompass: Sendable {
     public var objectives: [OmegaCompassEntry] = []
     public var ambitions: [OmegaCompassEntry] = []
     public var preferences: [OmegaCompassEntry] = []  // ## Preferences: softer than goals, read by every agent
+    public var roles: [OmegaCompassEntry] = []        // ## Roles: who you are to others (parent, friend)
+    public var nonNegotiables: [OmegaCompassEntry] = []  // ## Non-negotiables: rules that hold (BMM directives)
+    public var negotiables: [OmegaCompassEntry] = []  // ## Negotiables: rules that bend, with a reason
+    /// Every rule an agent follows, firmest first: non-negotiables, negotiables, then the preferences in use.
+    public var rules: [OmegaCompassEntry] {
+        (nonNegotiables + negotiables).filter { !$0.archived } + preferences.filter { $0.tokens["status"] == nil }
+    }
     public init() {}
 }
 
@@ -155,7 +179,8 @@ public enum OmegaFormat {
             out.append(OmegaGoal(id: t["id"] ?? "g-\(domain)-\(i)", domain: domain, title: title,
                                   status: t["status"] ?? (b.done ? "done" : "active"), due: t["due"],
                                   progress: t["progress"].flatMap { Int($0) }.map { min(100, max(0, $0)) },
-                                  objective: t["objective"], why: why?.isEmpty == true ? nil : why, done: b.done, said: t["said"]))
+                                  objective: t["objective"], why: why?.isEmpty == true ? nil : why, done: b.done, said: t["said"],
+                                  supports: t["supports"]))
         }
         return out
     }
@@ -256,7 +281,12 @@ public enum OmegaFormat {
     static let sectionKind: [String: String] = [
         "purpose": "purpose", "core belief": "purpose", "values": "value", "mission statement": "statement", "vision": "vision",
         "objectives": "objective", "strategic objectives": "objective", "goals": "goal", "preferences": "preference",
+        "roles": "role", "non-negotiables": "nonneg", "negotiables": "negotiable",
     ]
+
+    /// OMG BMM 1.3's enforcement levels for a rule (table 8.7), firmest first, as ~enforcement: values.
+    public static let enforcementLevels = ["strictly-enforced", "deferred-enforcement", "pre-authorized-override",
+                                           "post-justified-override", "override-with-explanation", "guideline"]
 
     public static func compass(_ text: String) -> OmegaCompass {
         var c = OmegaCompass()
@@ -278,8 +308,9 @@ public enum OmegaFormat {
                     words = String(l[r.upperBound...]).trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
                 }
             }
-            let prefix = ["value": "v", "statement": "st", "vision": "vi", "objective": "o", "goal": "g", "preference": "p"][cur.kind] ?? "x"
-            let e = OmegaCompassEntry(id: t["id"] ?? shortID(prefix, cur.kind, title), title: title, tokens: t, words: words, done: done)
+            let prefix = ["value": "v", "statement": "st", "vision": "vi", "objective": "o", "goal": "g", "preference": "p",
+                          "role": "r", "nonneg": "nn", "negotiable": "ng"][cur.kind] ?? "x"
+            let e = OmegaCompassEntry(id: t["id"] ?? shortID(prefix, cur.kind, title), title: title, tokens: t, words: words, done: done, kind: cur.kind)
             switch cur.kind {
             case "value": c.values.append(e)
             case "statement": c.missions.append(e)
@@ -287,6 +318,9 @@ public enum OmegaFormat {
             case "objective": c.objectives.append(e)
             case "goal": c.ambitions.append(e)
             case "preference": c.preferences.append(e)
+            case "role": c.roles.append(e)
+            case "nonneg": c.nonNegotiables.append(e)
+            case "negotiable": c.negotiables.append(e)
             default: break
             }
             current = nil
@@ -458,6 +492,283 @@ public enum OmegaFormat {
         for l in ls { if l.trimmingCharacters(in: .whitespaces).isEmpty && (out.last?.trimmingCharacters(in: .whitespaces).isEmpty ?? false) { continue }; out.append(l) }
         while out.last?.isEmpty == true { out.removeLast() }
         return out.joined(separator: "\n") + "\n"
+    }
+}
+
+// MARK: StratML: the plan as an exchange file
+//
+// StratML Part 2 (ANSI/AIIM 22, the ISO 17469 family), schema v2.2.10 of 2025-12-03, so another planning tool,
+// a coach or an employer's system can read the plan. The vault's lines stay the record; this is only a
+// projection of them, written on demand. A person's plan and a company's take the same shape.
+//
+//   Purpose -> the plan's Description      Mission, Vision -> Mission, Vision (all lines, one element each)
+//   Values -> Value, in rank order         Ambitions and domain goals -> Goal (both are desired results, BMM)
+//   Objectives -> Objective, under the goal that moves it (~objective:), with a PerformanceIndicator
+//   (metric, target, due); one no goal moves yet sits under a last Goal named "Objectives".
+//   Roles -> Role of the owner (a Person stakeholder)   Rules -> the plan's OtherInformation
+//
+// What StratML has no place for (domain, status, progress, ~serves, next actions, enforcement) goes in
+// OtherInformation as Omega's own lines ("~kind:goal ~domain:health ~progress:40", "- Buy shoes @2026-11-02"),
+// so `split` reads it back. Ids go out as Identifier, unchanged. Values have no Identifier in the schema, so a
+// goal's ~serves names them. Personal parts are opt-in: rules and roles only with `rules`.
+
+public struct OmegaStratMLScope: Sendable {
+    public var owner = ""                 // the plan's person (or company); empty leaves the name out
+    public var domains: Set<String>? = nil  // the life domains whose goals go in; nil is every domain
+    public var compass = true             // purpose, mission, vision, values, ambitions, objectives
+    public var rules = false              // roles, non-negotiables, negotiables, preferences: personal, so asked for
+    public var actions = true             // a goal's open next actions
+    /// The plan is a company's (or a team's, a family's): the owner is the Organization, and each role is a group of
+    /// its stakeholders (customers, staff) rather than a role one person plays. The same files, the same goals.
+    public var company = false
+    public init(owner: String = "", domains: Set<String>? = nil, compass: Bool = true, rules: Bool = false, actions: Bool = true, company: Bool = false) {
+        self.owner = owner; self.domains = domains; self.compass = compass; self.rules = rules; self.actions = actions; self.company = company
+    }
+}
+
+extension OmegaFormat {
+    public static let stratMLNamespace = "urn:ISO:std:iso:17469:tech:xsd:PerformancePlanOrReport"
+
+    /// The plan as a StratML Part 2 document. `labels` names the domains (slug -> label).
+    public static func stratML(_ c: OmegaCompass, goals: [OmegaGoal], actions: [OmegaAction], labels: [String: String] = [:],
+                               scope: OmegaStratMLScope = .init(), today: String = OmegaFormat.today()) -> String {
+        var ids = Set<String>()
+        /// An Identifier once per file (xsd:ID): a repeat, or one that is not a valid XML name, goes in OtherInformation only.
+        func ident(_ id: String) -> String? {
+            guard id.range(of: #"^[A-Za-z_][A-Za-z0-9._-]*$"#, options: .regularExpression) != nil, ids.insert(id).inserted else { return nil }
+            return id
+        }
+        func el(_ name: String, _ text: String?) -> String {
+            guard let text, !text.isEmpty else { return "" }
+            return "<\(name)>\(xml(text))</\(name)>"
+        }
+        func other(_ lines: [String]) -> String { el("OtherInformation", lines.filter { !$0.isEmpty }.joined(separator: "\n")) }
+        func tokens(_ pairs: [(String, String?)]) -> String {
+            pairs.compactMap { k, v in v.flatMap { $0.isEmpty ? nil : "~\(k):\($0.replacingOccurrences(of: " ", with: "_"))" } }.joined(separator: " ")
+        }
+        let date = #"^\d{4}-\d{2}-\d{2}$"#
+        func isDate(_ s: String?) -> Bool { s?.range(of: date, options: .regularExpression) != nil }
+        let valueName = Dictionary(c.values.map { ($0.id, $0.title) }, uniquingKeysWith: { a, _ in a })
+
+        let objectives = scope.compass ? c.objectives.filter { !$0.archived } : []
+        var placed = Set<String>()
+        func objective(_ o: OmegaCompassEntry, _ seq: String, supports: String? = nil) -> String {
+            placed.insert(o.id)
+            let target = o.tokens["target"].flatMap { Decimal(string: $0) != nil ? $0 : nil }
+            let due = isDate(o.tokens["due"]) ? o.tokens["due"] : nil
+            let metric = o.tokens["metric"]?.replacingOccurrences(of: "_", with: " ")
+            var x = "<Objective>" + el("Name", o.title) + el("Description", o.words ?? o.title) + el("Identifier", ident(o.id))
+                + el("SequenceIndicator", seq) + other([tokens([("kind", "objective"), ("status", o.tokens["status"]), ("metric", o.tokens["metric"]),
+                                                               ("target", o.tokens["target"]), ("due", o.tokens["due"])])])
+            if metric != nil || target != nil {
+                x += "<PerformanceIndicator PerformanceIndicatorType=\"\(target != nil ? "Quantitative" : "Qualitative")\" ValueChainStage=\"Outcome\">"
+                    + el("SequenceIndicator", seq) + el("MeasurementDimension", metric ?? o.title) + "<UnitOfMeasurement></UnitOfMeasurement>"
+                    + (metric.map { el("DescriptorName", $0) } ?? "")
+                // The one place StratML (Part 2 and the Part 3 draft alike) links to another plan: this measure is
+                // narrower than the goal it serves there.
+                if let supports {
+                    x += "<Relationship RelationshipType=\"Narrower_Than\">" + el("ReferentIdentifier", supports)
+                        + el("Name", "Serves \(supports)") + "</Relationship>"
+                }
+                if target != nil || due != nil {
+                    x += "<MeasurementInstance><TargetResult>" + el("EndDate", due) + el("NumberOfUnits", target) + "</TargetResult></MeasurementInstance>"
+                }
+                x += "</PerformanceIndicator>"
+            }
+            return x + "</Objective>"
+        }
+        func goal(name: String, description: String, id: String?, seq: Int, info: [String], objectives inner: [String]) -> String {
+            "<Goal>" + el("Name", name) + el("Description", description) + el("Identifier", id.flatMap(ident)) + el("SequenceIndicator", String(seq))
+                + other(info) + inner.joined() + "</Goal>"
+        }
+
+        var goalXML: [String] = []
+        if scope.compass {
+            for a in c.ambitions where !a.archived {
+                let serves = a.tokens["serves"]?.split(separator: ",").map { valueName[String($0)] ?? String($0) }.joined(separator: ", ")
+                goalXML.append(goal(name: a.title, description: a.words ?? a.title, id: a.id, seq: goalXML.count + 1,
+                                    info: [tokens([("kind", "ambition"), ("id", a.id), ("status", a.tokens["status"] ?? (a.done ? "achieved" : nil)),
+                                                   ("due", a.tokens["due"])]),
+                                           serves.map { "serves: \($0)" } ?? ""], objectives: []))
+            }
+        }
+        let open = Dictionary(grouping: actions.filter { !$0.done && $0.goal != nil }, by: { "\($0.domain)/\($0.goal!)" })
+        for g in goals where g.status != "archived" && (scope.domains?.contains(g.domain) ?? true) {
+            let seq = goalXML.count + 1
+            var inner: [String] = []
+            if let oid = g.objective, !placed.contains(oid), let o = objectives.first(where: { $0.id == oid }) {
+                inner.append(objective(o, "\(seq).1", supports: g.supports))
+            }
+            let next = scope.actions ? (open[g.key] ?? []).map { "- \($0.text)" + ($0.due.map { " @\($0)" } ?? "") } : []
+            goalXML.append(goal(name: g.title, description: g.why ?? g.title, id: g.id, seq: seq,
+                                info: [tokens([("kind", "goal"), ("id", g.id), ("domain", g.domain), ("status", g.status), ("due", g.due),
+                                               ("progress", g.progress.map(String.init)), ("objective", g.objective),
+                                               ("supports", g.supports)]),
+                                       labels[g.domain].map { "domain: \($0)" } ?? ""] + next,
+                                objectives: inner))
+        }
+        let loose = objectives.filter { !placed.contains($0.id) }
+        if !loose.isEmpty {
+            let seq = goalXML.count + 1
+            goalXML.append(goal(name: "Objectives", description: "Measurable objectives that no goal in this plan moves yet.", id: nil, seq: seq,
+                                info: ["~kind:objectives"], objectives: loose.enumerated().map { objective($1, "\(seq).\($0 + 1)") }))
+        }
+        if goalXML.isEmpty {   // the schema needs one goal
+            goalXML.append(goal(name: "No goals yet", description: "This plan has no goals yet.", id: nil, seq: 1, info: ["~kind:empty"], objectives: []))
+        }
+
+        var org = ""
+        let roles = scope.rules ? c.roles.filter { !$0.archived } : []
+        if scope.company {
+            org = "<Organization>" + el("Name", scope.owner.isEmpty ? nil : scope.owner) + el("Description", "A company plan, kept in Glyph Omega.")
+                + roles.map { "<Stakeholder StakeholderTypeType=\"Generic_Group\">" + el("Name", $0.title) + el("Description", $0.words) + "</Stakeholder>" }.joined()
+                + "</Organization>"
+        } else if !scope.owner.isEmpty || !roles.isEmpty {
+            org = "<Organization>" + el("Name", scope.owner.isEmpty ? nil : scope.owner) + el("Description", "A personal plan, kept in Glyph Omega.")
+                + "<Stakeholder StakeholderTypeType=\"Person\">" + el("Name", scope.owner.isEmpty ? "Plan owner" : scope.owner)
+                + roles.map { "<Role>" + el("Name", $0.title) + el("Description", $0.words) + "</Role>" }.joined()
+                + "</Stakeholder></Organization>"
+        }
+        func joined(_ es: [OmegaCompassEntry]) -> String? {
+            let live = es.filter { !$0.archived }
+            return live.isEmpty ? nil : live.map(\.title).joined(separator: "\n")
+        }
+        var core = org
+        if scope.compass {
+            if let v = joined(c.visions) { core += "<Vision>" + el("Description", v) + el("Identifier", c.visions.first.flatMap { ident($0.id) }) + "</Vision>" }
+            if let m = joined(c.missions) { core += "<Mission>" + el("Description", m) + el("Identifier", c.missions.first.flatMap { ident($0.id) }) + "</Mission>" }
+            core += c.values.filter { !$0.archived }.map { "<Value>" + el("Name", $0.title) + el("Description", $0.words) + "</Value>" }.joined()
+        }
+        core += goalXML.joined()
+
+        var rulesInfo: [String] = []
+        if scope.rules, !c.rules.isEmpty {
+            rulesInfo.append("Rules, with OMG BMM 1.3 enforcement levels:")
+            let kindName = ["nonneg": "non-negotiable", "negotiable": "negotiable", "preference": "preference"]
+            rulesInfo += c.rules.map { r in
+                "- \(r.title) " + tokens([("id", r.id), ("kind", kindName[r.kind]), ("scope", r.kind == "preference" ? r.scope : nil), ("enforcement", r.enforcement)])
+            }
+        }
+        let hasTarget = objectives.contains { $0.tokens["target"].flatMap { Decimal(string: $0) } != nil }
+        let kind = scope.company ? "Plan" : "Personal plan"
+        let name = scope.owner.isEmpty ? kind : "\(kind) of \(scope.owner)"
+        return """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <PerformancePlanOrReport xmlns="\(stratMLNamespace)" Type="\(hasTarget ? "Performance_Plan" : "Strategic_Plan")">\
+        \(el("Name", name))\(el("Description", scope.compass ? c.purpose : nil))\(other(rulesInfo))\
+        <StrategicPlanCore>\(core)</StrategicPlanCore>\
+        <AdministrativeInformation>\(el("PublicationDate", isDate(today) ? today : nil))</AdministrativeInformation>\
+        </PerformancePlanOrReport>
+
+        """
+    }
+
+    /// Someone else's plan, read from its StratML (Part 1, 2 or 3): what Omega needs to point a goal at it.
+    /// The file is kept as it came (data/apps/omega/plans/<slug>.xml); this is a read of it, never merged into the Compass.
+    public static func readStratML(_ xml: String) -> OmegaStratPlan? {
+        let r = StratMLReader()
+        let p = XMLParser(data: Data(xml.utf8))
+        p.shouldProcessNamespaces = true
+        p.delegate = r
+        guard p.parse(), r.root == "StrategicPlan" || r.root == "PerformancePlanOrReport", !r.plan.goals.isEmpty || !r.plan.name.isEmpty else { return nil }
+        var plan = r.plan
+        if plan.name.isEmpty { plan.name = plan.organization.isEmpty ? "A plan" : plan.organization }
+        return plan
+    }
+
+    /// A short file name for a plan: its name, lowercased, words joined by dashes.
+    public static func planSlug(_ name: String) -> String {
+        let s = name.lowercased().replacingOccurrences(of: #"[^a-z0-9]+"#, with: "-", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        return String((s.isEmpty ? "plan" : s).prefix(60)).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+    }
+
+    /// Text made safe inside an XML element.
+    static func xml(_ s: String) -> String {
+        s.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
+    }
+}
+
+/// A plan someone else keeps (an employer, a team, a family), as Omega reads it from StratML.
+public struct OmegaStratPlan: Hashable, Sendable {
+    public struct Item: Hashable, Sendable {
+        public var id: String           // its Identifier, else its SequenceIndicator, else its place ("goal-2", "goal-2.1")
+        public var name: String
+        public var description: String
+        public var objectives: [Item] = []
+    }
+    public var name = ""
+    public var organization = ""
+    public var description = ""
+    public var type = ""                // Strategic_Plan, Performance_Plan, Performance_Report (Part 1 has none)
+    public var goals: [Item] = []
+    /// Every goal and objective, with the referent a ~supports: token names: "<slug>/<id>".
+    public func targets(_ slug: String) -> [(referent: String, name: String, goal: Bool)] {
+        goals.flatMap { g in [("\(slug)/\(g.id)", g.name, true)] + g.objectives.map { ("\(slug)/\($0.id)", $0.name, false) } }
+    }
+}
+
+/// Reads the parts of a StratML document Omega uses, by local name (Part 1's stratml_core and Part 2/3's
+/// PerformancePlanOrReport namespaces alike).
+final class StratMLReader: NSObject, XMLParserDelegate {
+    var root = ""
+    var plan = OmegaStratPlan()
+    private var path: [String] = []
+    private var text = ""
+    private var goal: OmegaStratPlan.Item?
+    private var objective: OmegaStratPlan.Item?
+    private var seq = ""
+    private var ident = ""
+
+    func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?, qualifiedName: String?, attributes: [String: String] = [:]) {
+        if path.isEmpty { root = name; plan.type = attributes["Type"] ?? "" }
+        path.append(name)
+        text = ""
+        if name == "Goal", path.dropLast().last == "StrategicPlanCore" { goal = .init(id: "", name: "", description: ""); seq = ""; ident = "" }
+        if name == "Objective", goal != nil { objective = .init(id: "", name: "", description: ""); seq = ""; ident = "" }
+    }
+    func parser(_ parser: XMLParser, foundCharacters string: String) { text += string }
+    func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parent = path.dropLast().last ?? ""
+        switch (name, parent) {
+        case ("Name", root): plan.name = t
+        case ("Description", root): plan.description = t
+        case ("Name", "Organization") where plan.organization.isEmpty: plan.organization = t
+        case ("Name", "Goal"): goal?.name = t
+        case ("Description", "Goal"): goal?.description = t
+        case ("Name", "Objective"): objective?.name = t
+        case ("Description", "Objective"): objective?.description = t
+        case ("Identifier", "Goal"), ("Identifier", "Objective"): ident = t
+        case ("SequenceIndicator", "Goal"), ("SequenceIndicator", "Objective"): seq = t
+        case ("Objective", _):
+            if var o = objective, var g = goal {
+                o.id = Self.id(ident, seq, "goal-\(plan.goals.count + 1).\(g.objectives.count + 1)")
+                if o.name.isEmpty { o.name = o.description }
+                g.objectives.append(o); goal = g
+            }
+            objective = nil; seq = ""; ident = ""
+        case ("Goal", "StrategicPlanCore"):
+            if var g = goal {
+                if g.id.isEmpty { g.id = Self.id(ident, seq, "goal-\(plan.goals.count + 1)") }
+                plan.goals.append(g)
+            }
+            goal = nil; seq = ""; ident = ""
+        default: break
+        }
+        // A goal's own id is fixed before its objectives are read, so theirs never overwrite it.
+        if (name == "SequenceIndicator" || name == "Identifier"), parent == "Goal", var g = goal, g.id.isEmpty, objective == nil {
+            g.id = Self.id(ident, seq, ""); goal = g
+        }
+        path.removeLast()
+        text = ""
+    }
+    /// An id a token can carry: the Identifier, else "seq-<SequenceIndicator>", else the fallback.
+    static func id(_ ident: String, _ seq: String, _ fallback: String) -> String {
+        let clean = { (s: String) in s.replacingOccurrences(of: #"[^A-Za-z0-9._-]+"#, with: "-", options: .regularExpression) }
+        if !ident.isEmpty { return clean(ident) }
+        if !seq.isEmpty { return "seq-" + clean(seq) }
+        return fallback
     }
 }
 

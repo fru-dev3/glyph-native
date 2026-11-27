@@ -774,7 +774,12 @@ public struct DictateButton: View {
         self.circle = circle
     }
 
+    /// Nothing on the Mac (GlyphMics), unless the mic is not dictation (`instead`, Jot's recording).
     public var body: some View {
+        if GlyphMics.shown || instead != nil { button }
+    }
+
+    private var button: some View {
         HStack(spacing: 8) {
         // In a bar: pause, the level bars, then the mic (which is a stop while it listens). The
         // bar keeps one height, so nothing moves when talking starts (Fru, 2026-11-09: "Why don't
@@ -939,6 +944,7 @@ public struct DictateButton: View {
 public extension DictateButton {
     /// For AppKit: the button in an NSView, e.g. an NSAlert's `accessoryView` or beside a field.
     @MainActor static func hostingView(label: String? = "Talk", tint: Color = .accentColor, onFinal: @escaping (String) -> Void) -> NSView {
+        guard GlyphMics.shown else { return NSView(frame: .zero) }   // no mics on the Mac
         let v = NSHostingView(rootView: DictateButton(label: label, tint: tint, onFinal: onFinal).padding(4))
         v.setFrameSize(v.fittingSize)
         return v
@@ -948,10 +954,15 @@ public extension DictateButton {
 
 public extension View {
     /// A mic at the trailing edge of a text field or editor: tap and talk, the words land in `text`.
+    @ViewBuilder
     func dictatable(_ text: Binding<String>, tint: Color = .accentColor) -> some View {
-        HStack(alignment: .center, spacing: 6) {
-            self
-            DictateButton(text: text, tint: tint)
+        if GlyphMics.shown {
+            HStack(alignment: .center, spacing: 6) {
+                self
+                DictateButton(text: text, tint: tint)
+            }
+        } else {
+            self   // no mics on the Mac: Glyph Jot types into the field
         }
     }
 }

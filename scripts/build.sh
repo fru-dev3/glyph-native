@@ -9,8 +9,8 @@ set -euo pipefail
 # happen here"), so the guard only meant every run needed an unwritten variable. Gone.
 cd "$(dirname "$0")/.."
 
-VERSION=0.6.7
-BUILD=15
+VERSION=0.6.8
+BUILD=16
 
 [[ -d /Applications/Xcode.app ]] && export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer} # the on-device model's macros
 swift build -c release --product GlyphNative

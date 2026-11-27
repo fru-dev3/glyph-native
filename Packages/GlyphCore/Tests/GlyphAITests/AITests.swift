@@ -22,6 +22,15 @@ import GlyphVault
     let p = Summarizer.prompt(title: "Weekly sync", date: "2026-10-20", transcript: "[00:00] Ken Lee: Hello.")
     #expect(p.contains("\"Weekly sync\"") && p.contains("recorded on 2026-10-20") && p.hasSuffix("[00:00] Ken Lee: Hello."))
     #expect(Summarizer.partPrompt("x").hasSuffix("TRANSCRIPT PART:\nx"))
+    #expect(!p.contains("OWN NOTES") && !p.contains("THIS KIND"), "nothing extra when there are no notes and no guidance")
+}
+
+@Test func promptsCarryTheRecordersNotesAndTheMeetingType() {
+    let p = Summarizer.prompt(title: "Acme renewal", date: "2026-10-20", transcript: "[00:00] Ken Lee: Hello.",
+                              mine: "- price hold\n- seats", guidance: "A sales call: the buyer's pains first.")
+    #expect(p.contains("THIS KIND OF MEETING:\nA sales call"))
+    #expect(p.contains("OWN NOTES") && p.contains("- price hold\n- seats"))
+    #expect(p.hasSuffix("TRANSCRIPT:\n[00:00] Ken Lee: Hello."), "the transcript stays last")
 }
 
 @Test func firstNameOwnersGetTheLinkedFullName() {

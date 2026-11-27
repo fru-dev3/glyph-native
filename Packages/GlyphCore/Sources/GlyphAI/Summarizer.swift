@@ -75,28 +75,36 @@ public struct Summarizer: Sendable {
 
     public init() {}
 
-    /// Summarizes a conversation's transcript and writes its `notes.md`.
+    /// Summarizes a conversation's transcript and writes its `notes.md`. `mine` is what the
+    /// recorder typed during the meeting and `guidance` a meeting type's own instruction (a
+    /// recipe); both go into the prompt, so the summary is his notes made whole.
     @discardableResult
-    public func summarize(_ id: String, in vault: Vault) async throws -> Notes {
+    public func summarize(_ id: String, in vault: Vault, mine: String = "", guidance: String = "") async throws -> Notes {
         let meta = try vault.conversation(id)
-        let notes = try await summarize(vault.transcript(id), title: meta.title, date: String(meta.created.prefix(10)), people: meta.people)
+        let notes = try await summarize(vault.transcript(id), title: meta.title, date: String(meta.created.prefix(10)), people: meta.people,
+                                        mine: mine, guidance: guidance)
         try vault.writeNotes(notes, for: id)
         return notes
     }
 
     /// Notes for a transcript. `date` (`YYYY-MM-DD`) is when it was recorded, so "Friday" can become a date.
     /// `people` are the linked people: an owner said as a first name gets their full name.
-    public func summarize(_ transcript: GlyphVault.Transcript, title: String, date: String, people: [String] = []) async throws -> Notes {
+    public func summarize(_ transcript: GlyphVault.Transcript, title: String, date: String, people: [String] = [],
+                          mine: String = "", guidance: String = "") async throws -> Notes {
+        let mine = String(mine.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Summarizer.mineCharacters))
+        let guidance = String(guidance.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Summarizer.guidanceCharacters))
         let source = transcript.plainText
         var body = source
         guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw AIError.emptyTranscript }
         try AIError.check()
         do {
-            for _ in 0..<3 where body.count > Summarizer.partCharacters { body = try await noteParts(body) }
+            // His notes and the guidance take room in the window, so the transcript gets less.
+            let room = Summarizer.partCharacters - mine.count - guidance.count
+            for _ in 0..<3 where body.count > room { body = try await noteParts(body) }
             do {
-                return Summarizer.notes(from: try await generate(body, title: title, date: date), heard: source, people: people)
+                return Summarizer.notes(from: try await generate(body, title: title, date: date, mine: mine, guidance: guidance), heard: source + "\n" + mine, people: people)
             } catch LanguageModelSession.GenerationError.exceededContextWindowSize {
-                return Summarizer.notes(from: try await generate(noteParts(body), title: title, date: date), heard: source, people: people)
+                return Summarizer.notes(from: try await generate(noteParts(body), title: title, date: date, mine: mine, guidance: guidance), heard: source + "\n" + mine, people: people)
             }
         } catch let error as AIError {
             throw error
@@ -105,8 +113,8 @@ public struct Summarizer: Sendable {
         }
     }
 
-    private func generate(_ body: String, title: String, date: String) async throws -> GeneratedNotes {
-        let prompt = Summarizer.prompt(title: title, date: date, transcript: body)
+    private func generate(_ body: String, title: String, date: String, mine: String = "", guidance: String = "") async throws -> GeneratedNotes {
+        let prompt = Summarizer.prompt(title: title, date: date, transcript: body, mine: mine, guidance: guidance)
         do {
             return try await LanguageModelSession(instructions: Summarizer.instructions).respond(to: prompt, generating: GeneratedNotes.self).content
         } catch LanguageModelSession.GenerationError.decodingFailure {
@@ -140,15 +148,22 @@ public struct Summarizer: Sendable {
         something someone in the conversation said will be done. Leave a list empty rather than guess.
         """
 
-    static func prompt(title: String, date: String, transcript: String) -> String {
-        """
+    /// Room kept for the recorder's own notes and a recipe's guidance, in characters.
+    static let mineCharacters = 2_000
+    static let guidanceCharacters = 600
+
+    static func prompt(title: String, date: String, transcript: String, mine: String = "", guidance: String = "") -> String {
+        var out = """
         Write notes on the conversation "\(title)", recorded on \(date): a 2 to 4 sentence summary, \
         every decision, and every action item with its owner and due date when the conversation \
         states them. A weekday like "Friday" means the next one after \(date).
-
-        TRANSCRIPT:
-        \(transcript)
         """
+        if !guidance.isEmpty { out += "\n\nTHIS KIND OF MEETING:\n" + guidance }
+        if !mine.isEmpty {
+            out += "\n\nTHE RECORDER'S OWN NOTES, typed during the meeting. Keep every point they make, " +
+                "in their order, and fill each one out from the transcript:\n" + mine
+        }
+        return out + "\n\nTRANSCRIPT:\n" + transcript
     }
 
     static func partPrompt(_ part: String) -> String {

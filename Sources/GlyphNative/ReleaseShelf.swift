@@ -1,3 +1,4 @@
+import GlyphCapture
 import SwiftUI
 import AppKit
 import NativeKit
@@ -104,6 +105,9 @@ struct ReleaseShelfView: View {
             }
             VStack(spacing: 2) { vaultRow }
             Spacer(minLength: 0)
+            // Buy me a coffee, as every Glyph Mac app has it; the iPhone moved onto the Settings line
+            // (Fru, 2026-11-27: two rows, not three).
+            GlyphSupportRow(app: "Glyph Native").padding(.horizontal, -12)
             VStack(alignment: .leading, spacing: 8) {
                 Rectangle().fill(Token.hairline).frame(height: 1)
                 Text("Signed installs from GitHub").lineLimit(1)
@@ -119,6 +123,7 @@ struct ReleaseShelfView: View {
                     }
                     .buttonStyle(.plain).testFrame("settings")
                     Spacer()
+                    GlyphGetPhoneRow(app: "Glyph Native", link: URL(string: "https://glyph.fru.dev")!, compact: true)
                     Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")
                         .font(.system(size: 12.5).monospacedDigit()).foregroundStyle(Token.quiet)
                 }
