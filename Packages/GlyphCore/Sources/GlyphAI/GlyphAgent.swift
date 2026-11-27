@@ -77,7 +77,7 @@ public struct GlyphAgent: Sendable {
     public let tools: @Sendable (Hub, Ledger) -> [any Tool]
     public let fallback: @Sendable (Job, Hub) async -> Done
 
-    public static let all: [GlyphAgent] = [.time, .jot, .well, .crm, .omega, .connect, .wealth, .life, .travel]
+    public static let all: [GlyphAgent] = [.time, .jot, .well, .crm, .omega, .connect, .wealth, .life, .travel, .rig]
     public static func named(_ id: String) -> GlyphAgent? { all.first { $0.id == id } }
 
     /// The job in a session of its own with only this agent's tools; without the model, or when it called
@@ -135,6 +135,8 @@ public struct Hub: Sendable {
         var r = URLRequest(url: url, timeoutInterval: timeout)
         r.httpMethod = method; r.httpBody = body; r.cachePolicy = .reloadIgnoringLocalCacheData
         if body != nil { r.setValue(type, forHTTPHeaderField: "Content-Type") }
+        // A paired Mac's token rides in the address (GlyphHub.address(_:token:)); sent up front, no 401 round trip.
+        if let t = GlyphHub.token(in: base.absoluteString) { r.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
         for (k, v) in headers { r.setValue(v, forHTTPHeaderField: k) }
         guard let (d, resp) = try? await URLSession.shared.data(for: r), let h = resp as? HTTPURLResponse else { return nil }
         return (h.statusCode, d)

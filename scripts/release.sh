@@ -59,5 +59,9 @@ if gh release view $tag --repo $repo >/dev/null 2>&1; then
 else
   gh release create $tag --repo $repo --title "Glyph Native $version" --notes "${notes:-Glyph Native $version}" --latest=false
 fi
-gh release upload $tag "$dmg" dist/Glyph-Native.dmg dist/version.txt --repo $repo --clobber
+# Images first, version.txt last, each tried twice: a failed image upload once left version.txt saying
+# 0.6.9 beside no 0.6.9 image, so every Install link pointed at a missing file (2026-11-27).
+up() { gh release upload $tag "$@" --repo $repo --clobber || { sleep 5; gh release upload $tag "$@" --repo $repo --clobber; }; }
+up "$dmg" dist/Glyph-Native.dmg || { echo "image upload failed; version.txt left as it was"; exit 1; }
+up dist/version.txt
 echo "released: https://github.com/$repo/releases/tag/$tag"

@@ -3,6 +3,8 @@ import AppKit
 import CoreImage
 import CoreImage.CIFilterBuiltins
 import SwiftUI
+import GlyphVault
+import GlyphAI
 
 /// "Get <App> on your iPhone": a QR code to scan, the same sheet in every Glyph Mac app.
 ///
@@ -58,50 +60,85 @@ public struct GlyphGetPhoneSheet: View {
     private let link: URL
     @Environment(\.dismiss) private var dismiss
     @State private var copied = false
+    @State private var code: GlyphPhonePairing.Code?
+    @State private var asked = false
 
     /// - Parameters:
     ///   - app: the app as the family names it, "Glyph Time".
-    ///   - link: its real install page for the iPhone. Never a link the app has not got.
+    ///   - link: its page on the site, used only when the app has no row in `GlyphPhoneApps`.
     public init(app: String, link: URL) {
         self.app = app
         self.link = link
     }
 
+    /// One link for install and pairing: glyph.fru.dev/pair with this app, this Mac's address and a fresh code.
+    /// With no phone link on this Mac it is the install page alone.
+    var pairLink: String {
+        let id = GlyphPhoneApps.find(app)?.id
+        guard let c = code, let a = c.address else { return id.map { GlyphHub.pairLink(app: $0, address: nil, name: "", code: nil) } ?? link.absoluteString }
+        return GlyphHub.pairLink(app: id, address: a, name: c.name, code: c.code.isEmpty ? nil : c.code, bonjour: c.name)
+    }
+
     public var body: some View {
-        VStack(spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
                 Image(nsImage: NSApp.applicationIconImage)
                     .resizable().interpolation(.high).frame(width: 44, height: 44)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Get \(app) on your iPhone").font(.system(size: 17, weight: .semibold))
-                    Text("Point your iPhone's camera at the code.").font(.callout).foregroundStyle(.secondary)
-                }
+                Text("Get \(app) on your iPhone").font(.system(size: 17, weight: .semibold))
                 Spacer(minLength: 0)
             }
-            Group {
-                if let code = GlyphGetPhone.qr(link.absoluteString) {
-                    Image(nsImage: code).interpolation(.none).resizable().scaledToFit().frame(width: code.size.width, height: code.size.height)
-                } else {
-                    Text("The code could not be drawn.").foregroundStyle(.secondary).frame(width: 220, height: 220)
+            TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                let gone = code.map { !$0.code.isEmpty && $0.expires <= ctx.date } ?? false
+                VStack(spacing: 10) {
+                    Group {
+                        if let image = GlyphGetPhone.qr(pairLink) {
+                            Image(nsImage: image).interpolation(.none).resizable().scaledToFit().frame(width: image.size.width, height: image.size.height)
+                        } else {
+                            Text("The code could not be drawn.").foregroundStyle(.secondary).frame(width: 220, height: 220)
+                        }
+                    }
+                    .padding(16)
+                    .background(Color.white, in: RoundedRectangle(cornerRadius: 14))
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.primary.opacity(0.12), lineWidth: 1))
+                    .opacity(gone ? 0.25 : 1)
+                    .glyphProbe("get-phone-qr")
+                    if let c = code, !c.code.isEmpty {
+                        if gone {
+                            Button("Make a new code") { Task { await ask() } }.glyphProbe("get-phone-newcode")
+                        } else {
+                            Text("Good for \(max(1, Int(c.expires.timeIntervalSince(ctx.date) / 60))) min, pairs one phone").font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
+                }.frame(maxWidth: .infinity)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Point your iPhone's camera at it.").font(.system(size: 15, weight: .medium))
+                Text(code?.address != nil ? "It installs the app if you don't have it, then pairs it with this Mac."
+                     : asked ? "It installs the app. To pair it, open Glyph Native on this Mac and turn on Share with my iPhone." : "Asking this Mac for a code.")
+                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            if let c = code, c.address != nil {
+                VStack(alignment: .leading, spacing: 6) {
+                    status(true, "This Mac is ready for your phone")
+                    if c.tailnet { status(true, "Works away from home through Tailscale") }
+                    else {
+                        HStack(spacing: 8) {
+                            status(false, "Away from home needs Tailscale on this Mac")
+                            Link("Set up", destination: URL(string: "https://tailscale.com/download")!).font(.callout.weight(.semibold)).tint(.officeGreen)
+                                .glyphProbe("get-phone-tailscale")
+                        }
+                    }
                 }
             }
-            .padding(16)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.primary.opacity(0.12), lineWidth: 1))
-            .glyphProbe("get-phone-qr")
-            Text(link.absoluteString).font(.footnote).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                .textSelection(.enabled)
             HStack(spacing: 10) {
                 Button {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(link.absoluteString, forType: .string)
+                    NSPasteboard.general.setString(pairLink, forType: .string)
                     copied = true
                 } label: {
                     Label(copied ? "Copied" : "Copy link", systemImage: copied ? "checkmark" : "doc.on.doc")
                 }
                 .glyphProbe("get-phone-copy")
-                Button { NSWorkspace.shared.open(link) } label: { Label("Open in browser", systemImage: "safari") }
-                    .glyphProbe("get-phone-open")
                 Spacer(minLength: 0)
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction).tint(.officeGreen)
                     .glyphProbe("get-phone-done")
@@ -109,8 +146,18 @@ public struct GlyphGetPhoneSheet: View {
             .controlSize(.large)
         }
         .padding(24)
-        .frame(width: 400)
+        .frame(width: 420)
         .accessibilityIdentifier("get-phone-sheet")
+        .task { await ask() }
+    }
+
+    private func ask() async { code = await GlyphPhonePairing.code(); asked = true }
+
+    private func status(_ ok: Bool, _ s: String) -> some View {
+        HStack(spacing: 8) {
+            Circle().fill(ok ? Color.officeGreen : Color.secondary.opacity(0.5)).frame(width: 8, height: 8)
+            Text(s).font(.callout).foregroundStyle(ok ? .primary : .secondary)
+        }
     }
 }
 

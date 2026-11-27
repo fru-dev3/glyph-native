@@ -86,6 +86,12 @@ public struct GlyphTagPicker: View {
                 .foregroundStyle(tint)
                 .accessibilityIdentifier("tag.count")
 
+            // The picked ones on their own, above the list (Fru, 2026-11-27: "if I had 7 tags selected,
+            // I kind of have to scroll to figure out which one was selected ... if I want to unselect
+            // everything ... or if I just want to see just the selected tags"). A tap on a chip takes
+            // it off; Clear takes them all off. The list keeps its order, so nothing jumps under a finger.
+            if !on.isEmpty { picked }
+
             if let add, !exists, !typed.trimmingCharacters(in: .whitespaces).isEmpty {
                 Button {
                     let name = typed.trimmingCharacters(in: .whitespaces)
@@ -104,6 +110,30 @@ public struct GlyphTagPicker: View {
             }
             ForEach(matching) { row($0) }
         }
+    }
+
+    /// The picked ones, in the list's order, as green chips with an x, and Clear at the end.
+    private var picked: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(tags.filter { on.contains($0.id) }) { t in
+                    Button { withAnimation(.snappy) { _ = on.remove(t.id) } } label: {
+                        GlyphTagPill(t.name, on: true, all: mark == .domain, tint: tint, removable: true)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("tag.on." + t.id)
+                    .accessibilityLabel("Remove \(shown(t.name))")
+                }
+                Button { withAnimation(.snappy) { on.removeAll() } } label: {
+                    Text("Clear").font(.system(size: 14.5, weight: .semibold)).foregroundStyle(tint)
+                        .padding(.horizontal, 12).frame(height: 42).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("tag.clear")
+                .accessibilityLabel("Clear all \(on.count) selected")
+            }
+        }
+        .scrollClipDisabled()
     }
 
     /// A tag is written in proper case, as everywhere a tag is drawn; a row that is not a tag

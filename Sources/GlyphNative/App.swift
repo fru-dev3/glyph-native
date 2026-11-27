@@ -22,7 +22,7 @@ struct GlyphNativeApp: App {
             RootView()
                 .environmentObject(shelf)
                 .frame(minWidth: 1040, minHeight: 680).tint(.nativeGreen)
-                .task { shelf.refresh(); shelf.fetch(); UITest.shelf = shelf }
+                .task { shelf.refresh(); shelf.fetch(); UITest.shelf = shelf; PhoneShare.sync() }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in shelf.refresh() }
         }
         .windowStyle(.hiddenTitleBar)

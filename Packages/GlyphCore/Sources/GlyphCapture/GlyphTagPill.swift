@@ -26,9 +26,12 @@ public struct GlyphTagPill: View {
     /// The "All" chip: no `#`, and the app's own green rather than a tag's hue.
     private let all: Bool
     private let tint: Color
+    /// An x after the name: the chip is one of the picked ones, and tapping it takes it off.
+    private let removable: Bool
 
-    public init(_ name: String, on: Bool = false, count: Int = 0, all: Bool = false, tint: Color = .officeGreen) {
-        self.name = name; self.on = on; self.count = count; self.all = all; self.tint = tint
+    public init(_ name: String, on: Bool = false, count: Int = 0, all: Bool = false, tint: Color = .officeGreen,
+                removable: Bool = false) {
+        self.name = name; self.on = on; self.count = count; self.all = all; self.tint = tint; self.removable = removable
     }
 
     /// Jot's own values, so a chip is the same chip in both apps: 42 tall, #1c1c1e on a #2c2c2e
@@ -52,6 +55,11 @@ public struct GlyphTagPill: View {
             if count > 0 {
                 Text("\(count)").monospacedDigit()
                     .foregroundStyle(on ? Color.white.opacity(0.75) : Self.quiet)
+            }
+            if removable {
+                Image(systemName: "xmark").font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(on ? Color.white.opacity(0.8) : Self.quiet)
+                    .accessibilityHidden(true)
             }
         }
         .font(.system(size: 14.5, weight: .semibold))

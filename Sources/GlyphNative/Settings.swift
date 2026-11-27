@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import NativeKit
 import GlyphCapture
+import GlyphVault
 
 /// Where everything is: the vault, the hub it syncs through, and where apps are built from. Addresses come from
 /// ~/.config/glyph/env (personal setup, outside the repo); GLYPH_NATIVE_ENV points elsewhere in tests.
@@ -71,6 +72,7 @@ struct SettingsSheet: View {
                 } header: { Text("Vault") }
                 Section("This Mac") {
                     row("Installs apps from", "GitHub releases", "settings.repo")
+                    PhoneShareRow()
                 }
                 Section("Updates") {
                     LabeledContent("Check for updates") {
@@ -194,6 +196,7 @@ struct SettingsPage<Toggle: View>: View {
         heading("This Mac")
         card {
             line("Installs apps from") { quiet("GitHub releases") }
+            PhoneShareRow().padding(.top, 12)
             GlyphSupportToggle().padding(.top, 12)
         }
         heading("About")
@@ -498,5 +501,26 @@ private struct AppAnswerCard: View {
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(hover && answers.enabled ? tileEdge : Token.border))
         .opacity(answers.settings == nil ? 0.45 : 1)
         .onHover { if !PictureArgs.on { hover = $0 } }
+    }
+}
+
+/// "Share with my iPhone": the switch for Glyph Native's phone link, and what it is doing.
+struct PhoneShareRow: View {
+    @State private var on = PhoneShare.on
+    @State private var tick = 0
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle("Share with my iPhone", isOn: $on).toggleStyle(.switch).tint(.nativeGreen)
+                .onChange(of: on) { _, v in PhoneShare.on = v; tick += 1 }
+                .testFrame("settings.share-phone")
+            Text(state).font(.system(size: 12.5)).foregroundStyle(Token.quiet).lineLimit(2).id(tick)
+        }
+    }
+    private var state: String {
+        if PhoneShare.ownHub { return "Phones pair with your own hub, \(SetupFlow.storedAddress ?? "")." }
+        guard on else { return "Off: phones cannot reach this Mac." }
+        if let p = PhoneShare.link.problem { return p }
+        let n = PhoneShare.link.book.phones.count
+        return (PhoneShare.address.map { "Answering paired phones at \(GlyphHub.display($0))" } ?? "Starting") + (n == 0 ? "." : ", \(n) paired.")
     }
 }

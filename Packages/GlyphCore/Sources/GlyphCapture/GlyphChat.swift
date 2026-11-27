@@ -35,6 +35,9 @@ public struct ChatEntry: Identifiable {
     /// A screen with the answer (A2UI, `A2UISurfaceView`), drawn under the line; what is done on it goes to
     /// `ChatModel.onAction`.
     public var surfaces: [A2UISurface] = []
+    /// What `save`'s button says when Save is the wrong word for it ("Clean up", "Run test"): an action that
+    /// changes a machine is named for what it does. Nil: "Save".
+    public var confirm: String?
 
     public init(mine: Bool = false, text: String, kind: Kind = .card, detail: String? = nil, done: Bool = false, working: Bool = false,
                 mood: FaceMood? = nil, undo: (@MainActor () -> Void)? = nil, link: URL? = nil, save: (@MainActor () async -> ChatEntry)? = nil,
@@ -498,12 +501,12 @@ public struct GlyphChat: View {
             if l.working { ThinkingDots(color: tint) }
             Spacer(minLength: 4)
             if let save = l.save, !l.working {
-                Button("Save") {
+                Button(l.confirm ?? "Save") {
                     model.update(l.id) { $0.working = true }
                     Task { let e = await save(); withAnimation(.snappy) { model.update(l.id) { old in var e = e; e.id = old.id; old = e } } }
                 }
                 .font(.subheadline.weight(.semibold)).tint(tint).accessibilityIdentifier("chat-save")
-                Button("Dismiss") { model.update(l.id) { $0.save = nil; $0.text = "Not saved"; $0.detail = nil; $0.mood = .rest } }
+                Button("Dismiss") { model.update(l.id) { $0.text = $0.confirm == nil ? "Not saved" : "Left as it is"; $0.save = nil; $0.detail = nil; $0.mood = .rest } }
                     .font(.subheadline).foregroundStyle(.secondary).accessibilityIdentifier("chat-dismiss")
             }
             if let undo = l.undo {

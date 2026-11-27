@@ -4,6 +4,31 @@ GlyphCore follows semantic versioning (the number is in `VERSION`). A change tha
 the on-disk format or breaks the public API is a major version, a new API a minor one, a
 fix a patch. Every change gets a line here, so an app can see what moved before it updates.
 
+## 0.25.0: a Mac answers its own phones (2026-11-27)
+
+- `GlyphPhoneLink` (macOS): the phone link Glyph Native runs when "Share with my iPhone" is on. One listener on port
+  7075, every interface, answering only this Mac, the home network and the tailnet; Bonjour `_glyph._tcp` under the
+  Mac's name. It serves MacHub's routes plus `GET /health`, and every request needs the pairing token.
+- `GlyphPairBook`: 8-character codes (10 minutes, one use, 5 wrong tries a minute), traded once at `POST /pair` for a
+  long random token. The Mac keeps only the token's SHA-256, in its keychain (service dev.fru.glyph.phones).
+- `GlyphPhoneRoutes`, `GlyphHTTPRequest`: the same answers without a socket, for the tests.
+- `GlyphHub.address(_:token:)`, `display`, `token(in:)`, `exchange`, `pairLink`, `isTailnet`: the token rides in the
+  shared address (`http://glyph:<token>@host:port`), so every app that reads the App Group sends it; `Hub.send`
+  sends it up front as a Bearer header.
+- `GlyphPhoneApps`: each iPhone app's TestFlight link, one table (placeholders until the links exist).
+- `GlyphGetPhoneSheet`: the one QR now installs and pairs (glyph.fru.dev/pair with the app, this Mac's address and a
+  fresh code), with "This Mac is ready for your phone" and the Tailscale line under it.
+
+## 0.24.0: Glyph Rig's agent (2026-11-27)
+
+- `ChatEntry.confirm`: the word on an offered card's button when "Save" is wrong ("Clean up", "Run test");
+  Dismiss then says "Left as it is". Nil keeps "Save" everywhere it was.
+
+- `GlyphAgent.rig`: machine_status, drive_contents, clean_caches, speed_test, remember_rule, so the hub's
+  planner can answer and plan for the person's machines (surface `rig`). Glyph Rig runs the jobs itself on the
+  Mac, every change behind a yes; anywhere else a Rig tool does nothing and its card opens
+  `glyph-rig://chat?say=...`.
+
 ## 0.23.0: the sidebar foot is one row (2026-11-27)
 
 - `GlyphSidebarFoot`, design A of the foot board (Fru, 2026-11-27): one 44pt row under a hairline, the gear

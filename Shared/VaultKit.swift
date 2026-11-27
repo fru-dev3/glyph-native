@@ -4,6 +4,7 @@ import Foundation
 public enum VaultKit {
     public struct Device: Equatable, Sendable {
         public let name: String, kind: String, version: String, seen: Date
+        public init(name: String, kind: String, version: String = "", seen: Date) { self.name = name; self.kind = kind; self.version = version; self.seen = seen }
     }
     public struct Refusal: Error, Equatable, LocalizedError, Sendable {
         public let message: String

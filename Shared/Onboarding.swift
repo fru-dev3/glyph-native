@@ -88,7 +88,9 @@ public enum Onboarding {
     public static func codeExpired(status: Int?) -> Bool { status == 410 }
 
     public struct Pairing: Equatable, Sendable { public let address: String, name: String, code: String?
-        public init(address: String, name: String, code: String? = nil) { self.address = address; self.name = name; self.code = code } }
+        /// The Mac's Bonjour name (`_glyph._tcp`), tried on the same Wi-Fi when the address does not answer.
+        public var bonjour: String? = nil
+        public init(address: String, name: String, code: String? = nil, bonjour: String? = nil) { self.address = address; self.name = name; self.code = code; self.bonjour = bonjour } }
 
     /// The scanned or opened link, only if it is `https://glyph.fru.dev/pair#url=..&name=..` (the code the Mac
     /// shows) or `glyph-native://pair?url=..&name=..` (what the page hands over), with an http(s) address
@@ -105,8 +107,9 @@ public enum Onboarding {
         guard let u = URL(string: raw), u.host?.isEmpty == false else { return nil }
         let name = items?.first(where: { $0.name == "name" })?.value?.trimmingCharacters(in: .whitespaces) ?? ""
         let code = items?.first(where: { $0.name == "code" })?.value?.trimmingCharacters(in: .whitespaces)
+        let bonjour = items?.first(where: { $0.name == "bonjour" })?.value?.trimmingCharacters(in: .whitespaces)
         return Pairing(address: raw.trimmingCharacters(in: CharacterSet(charactersIn: "/")), name: name.isEmpty ? "your Mac" : name,
-                       code: code?.isEmpty == false ? code : nil)
+                       code: code?.isEmpty == false ? code : nil, bonjour: bonjour?.isEmpty == false ? bonjour : nil)
     }
 
     /// "this Mac" for this Mac; "keeps the vault" only for the computer whose address is the stored one

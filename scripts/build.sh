@@ -9,8 +9,8 @@ set -euo pipefail
 # happen here"), so the guard only meant every run needed an unwritten variable. Gone.
 cd "$(dirname "$0")/.."
 
-VERSION=0.6.9
-BUILD=17
+VERSION=0.6.10
+BUILD=18
 
 [[ -d /Applications/Xcode.app ]] && export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer} # the on-device model's macros
 swift build -c release --product GlyphNative
@@ -57,7 +57,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSHighResolutionCapable</key><true/>
   <!-- The vault computer is the person's own machine on their own network or tailnet, reached over plain http. -->
   <key>NSAppTransportSecurity</key><dict><key>NSAllowsArbitraryLoads</key><true/></dict>
-  <key>NSBonjourServices</key><array><string>_glyph-vault._tcp</string></array>
+  <key>NSBonjourServices</key><array><string>_glyph-vault._tcp</string><string>_glyph._tcp</string></array>
   <key>NSLocalNetworkUsageDescription</key><string>Glyph Native looks for your vault computer on this network.</string>
   <key>NSHumanReadableCopyright</key><string>© 2026 fru.dev</string>
 </dict>

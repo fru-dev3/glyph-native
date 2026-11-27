@@ -3,6 +3,35 @@ import AppKit
 import CoreImage.CIFilterBuiltins
 import Network
 import NativeKit
+import GlyphAI
+import GlyphVault
+
+/// "Share with my iPhone": Glyph Native itself answers the phone (GlyphCore's GlyphPhoneLink), on with a vault
+/// and no hub of the owner's own. A Mac whose ~/.config/glyph/env names GLYPH_VAULT_URL keeps pointing phones there.
+@MainActor
+enum PhoneShare {
+    static let key = "shareWithPhone"
+    /// A test or a picture keeps its paired phones in memory, never in this Mac's keychain.
+    static let link = GlyphPhoneLink(book: Onboarding.isolated() ? GlyphPairBook() : .keychain())
+    static var on: Bool {
+        get { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: key); sync() }
+    }
+    /// The owner runs a hub of their own (GLYPH_VAULT_URL): phones pair with it, as before.
+    static var ownHub: Bool { SetupFlow.storedAddress != nil }
+    static func sync() {
+        // A picture runs the link only when a check asks for it (GLYPH_PHONE_PORT).
+        let picture = PictureArgs.on && ProcessInfo.processInfo.environment["GLYPH_PHONE_PORT"] == nil
+        if on, !ownHub, !picture, let v = Setup.vaultPath { link.start(vault: URL(filePath: v), name: VaultModel.macName) } else { link.stop() }
+    }
+    /// The address a phone should keep, with the port: Tailscale's when it is up, else the home network's.
+    static var address: String? {
+        if let a = SetupFlow.storedAddress { return a }
+        guard link.running else { return nil }
+        return GlyphPhoneLink.best(GlyphPhoneLink.addresses()).map { "http://\($0):\(link.port)" }
+    }
+    static var tailnet: Bool { address.map(GlyphHub.isTailnet) ?? false }
+}
 
 /// Vault onboarding (M1 to M5): the state machine, the real checks, and the screens. Release window only.
 @MainActor
@@ -54,12 +83,12 @@ final class SetupFlow: ObservableObject {
         if let p = trail.popLast() { step = p; return }
         switch step { case .phone: step = .ready; case .ready, .other: step = .where; default: step = .welcome }  // a picture opened mid-flow has no trail
     }
-    func finish() { active = false; finishedOnce = true }
+    func finish() { active = false; finishedOnce = true; PhoneShare.sync() }
 
     /// Proves the folder (VaultKit.check inside accept); on success M4, otherwise the refusal on M2.
     private func ran(_: String) {
         if model.outcome.isEmpty { return }  // the panel was cancelled
-        if model.failed { refusal = model.outcome; step = .where } else { refusal = nil; remoteName = nil; proofAt = .now; step = .ready }
+        if model.failed { refusal = model.outcome; step = .where } else { refusal = nil; remoteName = nil; proofAt = .now; step = .ready; PhoneShare.sync() }
     }
     func useFolder(_ p: String) { model.accept(p); ran("") }
     func useHere(under home: String = NSHomeDirectory()) { model.outcome = ""; model.create(under: home); ran("") }
@@ -166,7 +195,12 @@ final class SetupFlow: ObservableObject {
         if PictureArgs.on, let f = PictureArgs.value("--fake-code") {   // a picture: no service asked
             pairCode = "K7M2PQ9X"; pairExpires = Date().addingTimeInterval(f == "expired" ? -5 : 9 * 60 + 30); return
         }
-        guard let addr = Self.storedAddress, let url = Onboarding.url(address: addr, port: Onboarding.port(of: addr), path: "/native/pair-codes") else { return }
+        guard let addr = Self.storedAddress else {
+            PhoneShare.sync()   // Glyph Native answers the phone itself: the code is made here
+            if PhoneShare.link.running { let c = PhoneShare.link.newCode(); pairCode = c.code; pairExpires = c.expires }
+            return
+        }
+        guard let url = Onboarding.url(address: addr, port: Onboarding.port(of: addr), path: "/native/pair-codes") else { return }
         Task {
             var r = URLRequest(url: url); r.httpMethod = "POST"; r.timeoutInterval = 3
             guard let (d, resp) = try? await URLSession.shared.data(for: r), (resp as? HTTPURLResponse)?.statusCode == 200,
@@ -229,6 +263,7 @@ struct SetupView: View {
                 if Task.isCancelled { break }
                 flow.model.reload()
                 if arrived == nil { arrived = VaultModel.newPhone(flow.model.entries, known: known, since: opened) }
+                if arrived == nil, let p = PhoneShare.link.book.phones.last(where: { $0.paired > opened }) { arrived = VaultKit.Device(name: p.name, kind: "iPhone", seen: p.paired) }
             }
         }
         .onAppear { if !still { withAnimation(.easeInOut(duration: 4).repeatForever(autoreverses: true)) { t = true } } }
@@ -339,20 +374,27 @@ struct SetupView: View {
                         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Token.tint))
                 }.buttonStyle(.plain).fixedSize().testFrame("setup.done")
             } else {
-                VStack(alignment: .leading, spacing: gap < 32 ? 14 : 22) {
-                    ForEach(Array(["Open Glyph Native on iPhone", "Tap Scan a code", "Point it at this square"].enumerated()), id: \.offset) { i, s in
-                        HStack(spacing: 18) {
-                            Text("\(i + 1)").font(.system(size: 20, weight: .bold)).foregroundStyle(Token.accentLight).frame(width: 44, height: 44).background(Circle().fill(Token.tint)).overlay(Circle().strokeBorder(Token.tintBorder))
-                            Text(s).font(.system(size: 22, weight: .medium)).lineLimit(1)
-                        }
-                    }
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Point your iPhone's camera at the code.").font(.system(size: 22, weight: .medium)).fixedSize(horizontal: false, vertical: true)
+                    body("It installs the app if you don't have it, then pairs it with this Mac.")
                 }
-                Text("No Glyph Native on your iPhone yet? Scan anyway.").font(.system(size: 14)).foregroundStyle(Token.quiet).lineLimit(1).fixedSize()
                 Rectangle().fill(Token.border).frame(height: 1)
                 VStack(alignment: .leading, spacing: 14) {
-                    note("house", "At home: same Wi-Fi on both.")
-                    note("globe", "Away from home: turn on Tailscale on both.")
+                    if PhoneShare.address != nil {
+                        note("checkmark.circle", "This Mac is ready for your phone", on: true).testFrame("setup.ready-line")
+                        if PhoneShare.tailnet { note("globe", "Away from home works through Tailscale", on: true) }
+                        else {
+                            HStack(spacing: 10) {
+                                note("globe", "Away from home needs Tailscale on this Mac")
+                                Link("Set up", destination: URL(string: "https://tailscale.com/download")!).font(.system(size: 16, weight: .semibold)).foregroundStyle(Token.accentLight).testFrame("setup.tailscale")
+                            }
+                        }
+                    } else {
+                        note("iphone.slash", PhoneShare.on ? (PhoneShare.link.problem ?? "Starting the phone link.") : "Share with my iPhone is off in Settings.")
+                    }
                 }
+                Text("Glyph Native answers the phone; nothing else to run. The code inside is good for 10 minutes and pairs one phone.")
+                    .font(.system(size: 14)).foregroundStyle(Token.quiet).fixedSize(horizontal: false, vertical: true)
                 Button { flow.finish() } label: {
                     Text("Done").font(.system(size: 16, weight: .semibold)).foregroundStyle(Token.text).padding(.horizontal, 30).frame(height: 44)
                         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Token.raised))
@@ -368,10 +410,10 @@ struct SetupView: View {
     private func quiet(_ s: String, _ run: @escaping () -> Void) -> some View {
         Button(s, action: run).buttonStyle(.plain).font(.system(size: 16, weight: .medium)).foregroundStyle(Token.accentLight)
     }
-    private func note(_ glyph: String, _ s: String) -> some View {
+    private func note(_ glyph: String, _ s: String, on: Bool = false) -> some View {
         HStack(spacing: 14) {
-            Image(systemName: glyph).font(.system(size: 17)).foregroundStyle(Token.quiet).frame(width: 24)
-            Text(s).font(.system(size: 16)).foregroundStyle(Token.quiet).lineLimit(1)
+            Image(systemName: glyph).font(.system(size: 17)).foregroundStyle(on ? Token.accentLight : Token.quiet).frame(width: 24)
+            Text(s).font(.system(size: 16)).foregroundStyle(on ? Token.text : Token.quiet).lineLimit(1)
         }
     }
 
@@ -510,8 +552,10 @@ struct SetupView: View {
     }
 
     private var qr: some View {
-        let addr = SetupFlow.storedAddress
-        let link = Onboarding.pairingLink(address: addr, name: VaultModel.macName, code: flow.pairCode)
+        // The owner's own hub keeps today's link; Glyph Native's link adds the app and the Bonjour name.
+        let link: String? = SetupFlow.storedAddress != nil
+            ? Onboarding.pairingLink(address: SetupFlow.storedAddress, name: VaultModel.macName, code: flow.pairCode)
+            : PhoneShare.address.map { GlyphHub.pairLink(app: "native", address: $0, name: VaultModel.macName, code: flow.pairCode, bonjour: VaultModel.macName) }
         return VStack(spacing: 16) {
             if let link, let img = Self.qrImage(link) {
                 TimelineView(.periodic(from: .now, by: 1)) { ctx in
@@ -533,8 +577,8 @@ struct SetupView: View {
             } else {
                 VStack(spacing: 8) {
                     Image(systemName: "iphone").font(.system(size: 54)).foregroundStyle(mint)
-                    Text("This Mac is not sharing its vault with phones yet.").font(.system(size: 17, weight: .semibold)).foregroundStyle(.white).multilineTextAlignment(.center)
-                    Text("Phone pairing needs a computer that serves the vault.").font(.system(size: 14)).foregroundStyle(.white.opacity(0.85)).multilineTextAlignment(.center)
+                    Text("This Mac is not sharing its vault with phones.").font(.system(size: 17, weight: .semibold)).foregroundStyle(.white).multilineTextAlignment(.center)
+                    Text("Turn on Share with my iPhone in Settings.").font(.system(size: 14)).foregroundStyle(.white.opacity(0.85)).multilineTextAlignment(.center)
                 }.frame(width: 320).testFrame("setup.nocode")
             }
         }
