@@ -1,4 +1,3 @@
-#if os(iOS)
 import GlyphAI
 import GlyphVault
 import SwiftUI
@@ -253,7 +252,9 @@ public struct GlyphChat: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.glyphComposerTags) private var tagging
     /// Words said on a tag's page, waiting to be said here with that tag (`GlyphTagComposer`).
+    #if os(iOS)
     @Environment(\.glyphChatAsk) private var ask
+    #endif
     @State private var opened: Set<UUID> = []
     @State private var talking = false
     @State private var showHistory = false
@@ -284,6 +285,7 @@ public struct GlyphChat: View {
             // Which app this is, on the family's one top line. A chat screen is the same shape in
             // every Glyph app -- a face, a question and a composer -- so without this line there
             // is nothing on it that says which one you are in.
+            #if os(iOS)   // the drawer is the phone's; a Mac app's sidebar says which app this is
             if let mark {
                 GlyphAppHeader(name: appName ?? name, mark: mark, tint: tint, page: "Chat") {
                     GlyphDrawerButton()
@@ -292,6 +294,7 @@ public struct GlyphChat: View {
                 }
                 .padding(.bottom, 2)
             }
+            #endif
             ScrollViewReader { scroll in
                 ScrollView {
                     VStack(spacing: 14) {
@@ -318,7 +321,7 @@ public struct GlyphChat: View {
                 .scrollDismissesKeyboard(.interactively)
                 .clipped()   // inside the safe area: a scrolled bubble never runs under the clock
                 .overlay(alignment: .top) {
-                    LinearGradient(colors: [Color(uiColor: .systemBackground), Color(uiColor: .systemBackground).opacity(0)], startPoint: .top, endPoint: .bottom)
+                    LinearGradient(colors: [GlyphChat.page, GlyphChat.page.opacity(0)], startPoint: .top, endPoint: .bottom)
                         .frame(height: 20).allowsHitTesting(false)
                 }
                 .onChange(of: model.entries.count) { _, _ in withAnimation { scroll.scrollTo(model.entries.last?.id, anchor: .bottom) } }
@@ -334,22 +337,26 @@ public struct GlyphChat: View {
                 }
                 .onChange(of: composing) { _, on in if on { withAnimation { scroll.scrollTo("fru-dots", anchor: .bottom) } } }
             }
-            .background(Color(uiColor: .systemBackground))
+            .background(GlyphChat.page)
             .safeAreaInset(edge: .top, spacing: 0) { if let top { top } }
             .safeAreaInset(edge: .bottom, spacing: 0) { composer }
+            #if os(iOS)
             .toolbar(.hidden, for: .navigationBar)
+            #endif
             .task { await model.resend() }
+            #if os(iOS)
             // A tag's page sent words here (`GlyphTagComposer`): say them as the next turn, with the tag.
             .task(id: ask?.wrappedValue?.id) {
                 guard let a = ask?.wrappedValue else { return }
                 ask?.wrappedValue = nil
                 _ = await model.say(a.words, tag: a.tag)
             }
+            #endif
             .sheet(isPresented: $showHistory) {
                 if let log = model.log { ChatHistorySheet(log: log, current: model.chatID, tint: tint) { model.reopen($0) } }
             }
             }
-            .background(Color(uiColor: .systemBackground))
+            .background(GlyphChat.page)
         }
     }
 
@@ -377,7 +384,7 @@ public struct GlyphChat: View {
                     Button { send(e) } label: {
                         Text(e).font(.subheadline.weight(.medium)).foregroundStyle(.primary).lineLimit(1)
                             .padding(.horizontal, 18).padding(.vertical, 12)
-                            .background(Color(uiColor: .secondarySystemBackground), in: Capsule())
+                            .background(GlyphChat.panel, in: Capsule())
                     }
                     .buttonStyle(.plain)
                 }
@@ -423,6 +430,16 @@ public struct GlyphChat: View {
             .springIn(from: .leading)
         }
     }
+
+    /// The page and the bubbles' panel, the system's own on each platform. The Mac draws the same chat as
+    /// the phone (2026-11-27, Glyph Omega's Capture became a conversation): one chat in the family, not a copy.
+    #if os(iOS)
+    static let page = Color(uiColor: .systemBackground)
+    static let panel = Color(uiColor: .secondarySystemBackground)
+    #else
+    static let page = Color(nsColor: .windowBackgroundColor)
+    static let panel = Color.primary.opacity(0.08)   // the system control colour is the page colour in dark mode
+    #endif
 
     /// The engine's name as a person reads it. The hub answers with its own ids ("claude",
     /// "gemini", "ollama/llama3"); a council answers with several, joined.
@@ -496,7 +513,7 @@ public struct GlyphChat: View {
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 13)
-        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(GlyphChat.panel, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .settle(on: l.working)
     }
 
@@ -533,4 +550,3 @@ public struct GlyphChat: View {
         Task { _ = await model.say(words, tag: tag) }
     }
 }
-#endif

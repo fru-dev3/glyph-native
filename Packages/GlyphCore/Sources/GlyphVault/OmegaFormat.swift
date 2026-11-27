@@ -423,7 +423,10 @@ public enum OmegaFormat {
     //
     // ~status:proposed while it waits for a yes (agents skip it), ~status:archived once put away (never deleted).
 
-    public static let preferenceScopes = ["design", "writing", "brand", "agents", "code", "food", "health", "schedule", "people", "travel", "general"]
+    /// `models` (which engine thinks: "local model first") and `tools` (the apps and services to use) since
+    /// 2026-11-27 (Fru: "my voice ... my color palette, design themes, apps I want to use, local model first.
+    /// Make sure Omega is capturing all of that"). Voice is `writing`; palette and themes are `design`.
+    public static let preferenceScopes = ["design", "writing", "brand", "agents", "models", "tools", "code", "food", "health", "schedule", "people", "travel", "general"]
 
     /// A new preference at the end of ## Preferences. The same words again give back the one already there.
     public static func addPreference(_ text: String, words: String, scope: String, strong: Bool = false, proposed: Bool = false,
@@ -473,9 +476,11 @@ public enum OmegaFormat {
     public static func guessScope(_ words: String) -> String {
         let w = " " + words.lowercased().replacingOccurrences(of: #"[^a-z0-9#]+"#, with: " ", options: .regularExpression) + " "
         let keys: [(String, [String])] = [
+            ("models", ["model", "models", "llm", "llms", "ollama", "claude", "gemini", "codex", "openai", "gpt", "on device", "local first"]),
+            ("tools", ["app", "apps", "tool", "tools", "service", "services", "software", "notion", "obsidian", "slack", "browser"]),
             ("brand", ["brand", "logo", "gold", "green", "fru dev", "#008000"]),
-            ("writing", ["dash", "dashes", "emoji", "emojis", "write", "writing", "word", "words", "copy", "prose", "tone", "wording", "label", "labels"]),
-            ("design", ["design", "visual", "header", "headers", "icon", "icons", "layout", "font", "color", "colour", "screen", "minimal", "minimalist", "wrap", "wraps", "button", "dark mode"]),
+            ("writing", ["dash", "dashes", "emoji", "emojis", "write", "writing", "word", "words", "copy", "prose", "tone", "wording", "label", "labels", "voice"]),
+            ("design", ["design", "visual", "header", "headers", "icon", "icons", "layout", "font", "color", "colour", "screen", "minimal", "minimalist", "wrap", "wraps", "button", "dark mode", "palette", "theme", "themes", "colors", "colours"]),
             ("code", ["code", "repo", "commit", "public", "server", "package", "vault"]),
             ("food", ["eat", "food", "meal", "drink", "coffee", "breakfast", "lunch", "dinner"]),
             ("health", ["gym", "sleep", "run", "workout", "walk", "health"]),

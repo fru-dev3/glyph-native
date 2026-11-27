@@ -35,5 +35,9 @@ private let compass = "# Compass\n~schema:2\n\n## Values\n\n- Family ~id:v-11111
     #expect(OmegaFormat.parsePreference("design: big icons") == ("Big icons", "design"))
     #expect(OmegaFormat.guessScope("I hate long labels") == "writing")
     #expect(OmegaFormat.guessScope("never gold") == "brand")
+    #expect(OmegaFormat.guessScope("Local model first") == "models")
+    #expect(OmegaFormat.guessScope("Use Obsidian for long notes") == "tools")
+    #expect(OmegaFormat.guessScope("A calm palette, dark themes") == "design")
+    #expect(OmegaFormat.guessScope("Write in my voice") == "writing")
     #expect(OmegaFormat.guessScope("No emojis, drawn icons") == "writing")
 }

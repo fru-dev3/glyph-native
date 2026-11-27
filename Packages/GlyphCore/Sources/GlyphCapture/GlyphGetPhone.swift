@@ -6,7 +6,7 @@ import SwiftUI
 
 /// "Get <App> on your iPhone": a QR code to scan, the same sheet in every Glyph Mac app.
 ///
-/// Fru, 2026-11-26, after Wispr Flow's "Get Flow on your phone": "you can click, and then it will give you
+/// Fru, 2026-11-26, after another dictation app's "get it on your phone" row: "you can click, and then it will give you
 /// the QR code. You scan it, and then you can just install the mobile app from the App Store."
 ///
 /// The link is the app's real install page, passed in by the app, never made up here. There is no

@@ -105,32 +105,16 @@ struct ReleaseShelfView: View {
             }
             VStack(spacing: 2) { vaultRow }
             Spacer(minLength: 0)
-            // Buy me a coffee, as every Glyph Mac app has it; the iPhone moved onto the Settings line
-            // (Fru, 2026-11-27: two rows, not three).
-            GlyphSupportRow(app: "Glyph Native").padding(.horizontal, -12)
-            VStack(alignment: .leading, spacing: 8) {
-                Rectangle().fill(Token.hairline).frame(height: 1)
-                Text("Signed installs from GitHub").lineLimit(1)
-                    .font(.system(size: 12.5)).lineSpacing(2).foregroundStyle(Token.quiet).fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 4)
-                HStack {
-                    Button { openSettings() } label: {
-                        Label("Settings", systemImage: "gearshape").font(.system(size: 13.5, weight: sub != nil ? .semibold : .regular))
-                            .foregroundStyle(sub != nil ? Token.tintText : Token.rowText)
-                            .padding(.horizontal, 8).frame(height: 30)
-                            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(sub != nil ? Token.tint : .clear))
-                            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(sub != nil ? Token.tintBorder : .clear))
-                    }
-                    .buttonStyle(.plain).testFrame("settings")
-                    Spacer()
-                    GlyphGetPhoneRow(app: "Glyph Native", link: URL(string: "https://glyph.fru.dev")!, compact: true)
-                    Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")
-                        .font(.system(size: 12.5).monospacedDigit()).foregroundStyle(Token.quiet)
-                }
-            }
-            .padding(.horizontal, 6)
+            // The family's one foot (GlyphSidebarFoot, design A, Fru 2026-11-27): one row with the gear (an X
+            // while Settings shows), what this shelf installs from with the version, the iPhone and the coffee.
+            GlyphSidebarFoot(live: true, says: "Signed installs from GitHub",
+                             detail: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+                             app: "Glyph Native", iphone: ("Glyph Native", URL(string: "https://glyph.fru.dev")!),
+                             settingsOpen: sub != nil, back: { sub = nil }) { openSettings() }
+                .padding(.horizontal, -12)
+                .testFrame("settings")
         }
-        .padding(.horizontal, 12).padding(.bottom, 14)
+        .padding(.horizontal, 12).padding(.bottom, 2)
         .frame(width: 244)
         .background(Token.sidebar.ignoresSafeArea())
         .overlay(alignment: .topTrailing) { sidebarToggle.padding(.top, 2).padding(.trailing, 8) }

@@ -51,6 +51,38 @@ public struct GlyphSupportRow: View {
     }
 }
 
+/// The coffee as a round button, at the end of the sidebar foot's one row (Fru, 2026-11-27, design A):
+/// a 32-point office green circle with a white cup, opening the same support page. Hidden by the same
+/// Settings switch, and Hide on a right-click.
+public struct GlyphSupportButton: View {
+    private let link: URL
+    @AppStorage(GlyphSupportRow.shownKey) private var shown = true
+
+    /// - Parameter app: the app's name, sent as `?from=`.
+    public init(app: String? = nil) {
+        var c = URLComponents(string: "https://glyph.fru.dev/support")!
+        if let app { c.queryItems = [URLQueryItem(name: "from", value: app)] }
+        link = c.url!
+    }
+
+    public var body: some View {
+        if shown {
+            Button { NSWorkspace.shared.open(link) } label: {
+                Image(systemName: "cup.and.saucer.fill").font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(Circle().fill(Color.officeGreen))
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .help("Buy me a coffee: everything in Glyph is free, built by one person")
+            .glyphProbe("support")
+            .accessibilityIdentifier("support-button")
+            .contextMenu { Button("Hide (Settings can show it again)") { shown = false } }
+        }
+    }
+}
+
 /// The Settings switch for the coffee bar: one line, for every Glyph Mac app's Settings page.
 public struct GlyphSupportToggle: View {
     @AppStorage(GlyphSupportRow.shownKey) private var shown = true

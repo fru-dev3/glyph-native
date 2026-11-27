@@ -117,7 +117,7 @@ import GlyphVault
     }
 
     /// Ask the hub. A failure leaves what is already here: a tag list that empties itself because
-    /// Tailscale is off is worse than a slightly old one.
+    /// the network is off is worse than a slightly old one.
     @discardableResult
     public func refresh(_ base: URL?) async -> Bool {
         guard let base else { return false }

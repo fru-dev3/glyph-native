@@ -9,7 +9,7 @@ renderer could take over later.
 Catalog id: **`dev.fru.glyph/catalog/v1`**. An app says it draws it per turn, as the spec has it:
 `{"a2uiRendererCapabilities": {"1.0": {"supportedCatalogIds": ["dev.fru.glyph/catalog/v1"]}}}`
 (`Hub.understand(..., supportedCatalogIds: [A2UI.catalogId])` sends it). The hub checks every screen against
-this list (`server/jot-inbox.py`, `A2UI_PARTS`; keep the two in step) and drops what does not fit, so a bad
+this list (the hub's `A2UI_PARTS`; keep the two in step) and drops what does not fit, so a bad
 generation never reaches a phone.
 
 ## Messages

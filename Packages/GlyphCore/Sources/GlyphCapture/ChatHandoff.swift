@@ -1,8 +1,11 @@
-#if os(iOS)
 import GlyphAI
 import GlyphVault
 import SwiftUI
+#if os(iOS)
 import UIKit
+#else
+import AppKit
+#endif
 
 extension Color {
     /// "007A5E" (a GlyphAgent's colour).
@@ -72,11 +75,11 @@ extension ChatModel {
             guard shared else {
                 // No shared queue in this app: Time hears it in its own Chat, and confirms there.
                 var c = URLComponents(string: "glyph-time://talk")!; c.queryItems = [URLQueryItem(name: "text", value: command)]
-                let sent = await UIApplication.shared.open(c.url!)
+                let sent = await ChatHandoffOpen.open(c.url!)
                 return [ChatEntry(text: sent ? "Sent to Time's Chat: \(command)" : "Glyph Time isn't on this iPhone", mood: sent ? .rest : .sad,
                                   link: sent ? timeLink : nil, agent: "time")]
             }
-            let opened = await UIApplication.shared.open(GlyphAgent.armLink(back: back))
+            let opened = await ChatHandoffOpen.open(GlyphAgent.armLink(back: back))
             // Time answers in the queue, then comes back; without Time, a few seconds only (a test may answer for it).
             for _ in 0..<(opened ? 600 : 6) {
                 if let a = TimeRequest.answer(id, in: queue) {
@@ -113,4 +116,14 @@ extension Array where Element == ChatEntry {
         return out
     }
 }
-#endif
+
+/// Opens another app's link: UIApplication on the phone, NSWorkspace on the Mac.
+@MainActor enum ChatHandoffOpen {
+    static func open(_ url: URL) async -> Bool {
+        #if os(iOS)
+        return await UIApplication.shared.open(url)
+        #else
+        return NSWorkspace.shared.open(url)
+        #endif
+    }
+}

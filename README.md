@@ -7,7 +7,7 @@ Part of the [Glyph family](https://glyph.fru.dev) by [fru.dev](https://fru.dev).
 
 ## Install
 
-Download [Glyph-Native.dmg](https://github.com/fru-dev3/glyph-native/releases/latest/download/Glyph-Native.dmg)
+Download [Glyph-Native.dmg](https://github.com/fru-dev3/glyph-studio/releases/download/native/Glyph-Native.dmg)
 and drag Glyph Native to Applications. It is signed and notarized by Apple. Needs macOS 26 on
 Apple silicon.
 

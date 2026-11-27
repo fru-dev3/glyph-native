@@ -340,7 +340,7 @@ struct SettingsPage<Toggle: View>: View {
         let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .top), count: pageW >= 860 ? 4 : 2), spacing: 14) {
             AboutTile(symbol: "globe", name: "Website", detail: "glyph.fru.dev", url: "https://glyph.fru.dev").testFrame("about.site")
-            AboutTile(symbol: "sparkles", name: "What's new", detail: "Version \(short)", url: "https://github.com/fru-dev3/glyph-native/releases/tag/v\(short)").testFrame("about.news")
+            AboutTile(symbol: "sparkles", name: "What's new", detail: "Version \(short)", url: "https://github.com/fru-dev3/glyph-studio/releases/tag/native").testFrame("about.news")
             AboutTile(symbol: "chevron.left.forwardslash.chevron.right", name: "Source", detail: "On GitHub", url: "https://github.com/fru-dev3/glyph-native").testFrame("about.source")
             AboutTile(symbol: "doc.text", name: "License", detail: "MIT", url: "https://github.com/fru-dev3/glyph-native/blob/main/LICENSE").testFrame("about.license")
         }

@@ -4,6 +4,24 @@ GlyphCore follows semantic versioning (the number is in `VERSION`). A change tha
 the on-disk format or breaks the public API is a major version, a new API a minor one, a
 fix a patch. Every change gets a line here, so an app can see what moved before it updates.
 
+## 0.23.0: the sidebar foot is one row (2026-11-27)
+
+- `GlyphSidebarFoot`, design A of the foot board (Fru, 2026-11-27): one 44pt row under a hairline, the gear
+  (an X that says "Back" while `settingsOpen`), the vault's state filling the middle, the iPhone icon, and the
+  round coffee button. It was two rows, the coffee bar above the gear's line.
+- One set of words: "Saving to your vault" / "Saving on this Mac", or with `reads: true` "Reading your vault" /
+  "Vault not found". `detail` adds an app's own status after them ("Reading your vault · 1 h old") and
+  `refresh` makes a click on them read again, with a mark on hover. `app` names the app for the support page.
+- `GlyphSupportButton(app:)`: the coffee as a 32pt office green circle, hidden by the same Settings switch.
+
+## 0.22.0: one search field and one way back from Settings on every Mac sidebar (2026-11-27)
+
+- `GlyphSidebarSearch(text:prompt:focus:onSubmit:)`: the always-visible field under `GlyphSidebarHeader`,
+  Glyph Jot's (28pt, 7pt corners, magnifier, clear button). Command-F puts the cursor in it, Esc clears it,
+  `focus` lets a menu item do the same. Only the field is shared; each app keeps what its words find.
+- `GlyphSidebarFoot(settingsOpen:back:)`: while settings shows, the gear is filled and tinted, says "Back"
+  and runs `back`, as Glyph Jot's does. Both default off, so nothing changes for an app that passes neither.
+
 ## 0.21.0: every app's chat can draw the hub's screens (2026-11-24)
 
 - `Hub.screens(for:)`: what a chat turn passes as `supportedCatalogIds`, the Glyph catalog unless that

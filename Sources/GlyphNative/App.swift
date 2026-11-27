@@ -178,13 +178,13 @@ final class Shelf: ObservableObject {
     /// Asks GitHub again for what is newest.
     func fetch() { fetchReleases() }
 
-    /// This app's own newest release, by the same redirect its apps use. Only a version strictly
-    /// newer than the one running counts, so a copy built ahead of the release says nothing.
+    /// This app's own newest release, read from the version.txt beside its disk image, as the hosted
+    /// apps' are (its repo's newest release is Glyph Bot's). Only a version strictly newer than the
+    /// one running counts, so a copy built ahead of the release says nothing.
     private func fetchOwn() async {
-        guard let url = Release.ownLatestURL else { return }
-        var req = URLRequest(url: url, timeoutInterval: 15)
-        req.httpMethod = "HEAD"
-        let found = (try? await URLSession.shared.data(for: req))?.1.url.flatMap(Release.tag(from:))
+        let text = (try? await URLSession.shared.data(from: Release.ownVersionURL)).flatMap { String(data: $0.0, encoding: .utf8) }?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let found = text.flatMap { Release.numbers($0) == nil ? nil : $0 }
         let mine = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         ownUpdate = found.flatMap { Release.isNewer($0, than: mine) ? $0 : nil }
     }
@@ -193,7 +193,8 @@ final class Shelf: ObservableObject {
     /// a running app cannot be copied over, so the person drags it across as they did the first
     /// time. It lands in Downloads, where they can find it again.
     func getOwnUpdate() {
-        guard !gettingOwn, let url = Release.ownDownloadURL else { return }
+        guard !gettingOwn else { return }
+        let url = Release.ownDownloadURL
         gettingOwn = true
         Task {
             defer { Task { @MainActor in self.gettingOwn = false } }
@@ -215,7 +216,7 @@ final class Shelf: ObservableObject {
             await withTaskGroup(of: (String, String?).self) { g in
                 for a in Release.apps where a.hasDownload {
                     g.addTask {
-                        if let v = a.versionURL {   // hosted on Glyph Native's repo: the version is a small text file
+                        if let v = a.versionURL {   // a rolling release named for the app: the version is a small text file
                             let text = (try? await URLSession.shared.data(from: v)).flatMap { String(data: $0.0, encoding: .utf8) }?.trimmingCharacters(in: .whitespacesAndNewlines)
                             return (a.id, text.flatMap { Release.numbers($0) == nil ? nil : $0 })
                         }

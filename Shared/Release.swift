@@ -11,8 +11,9 @@ public struct ReleasedApp: Identifiable, Hashable, Sendable {
     public let job: String
     public let repo: String?       // GitHub "owner/name"; nil when there is no public download
     public let asset: String?      // the disk image's file name on the release
-    /// The release that holds the image when it is not the repo's newest: the apps hosted on Glyph
-    /// Native's own repo each have a rolling release named for the app, beside a version.txt.
+    /// The release that holds the image when it is not the repo's newest: every app but Glyph Bot has a
+    /// rolling release named for it on glyph-studio, beside a version.txt (2026-11-27: the apps' own repos
+    /// went private, and a private repo's downloads are gone for everyone else).
     public let tag: String?
     public let macBundle: String?
     /// An earlier app's bundle id that this one replaces: never offered, never touched, only noticed.
@@ -46,21 +47,21 @@ public enum Release {
         ReleasedApp(id: "studio", name: "Glyph Bot", job: "One harness for all your agents",
                     repo: "fru-dev3/glyph-studio", asset: "Glyph-Bot.dmg", macBundle: "dev.fru.studio", retiredBundle: "sh.prevail.desktop", group: "Layers"),
         ReleasedApp(id: "jot", name: "Glyph Jot", job: "Personal context",
-                    repo: "fru-dev3/glyph-jot", asset: "Glyph-Jot.dmg", macBundle: "dev.fru.jot.mac", group: "Layers"),
+                    repo: "fru-dev3/glyph-studio", asset: "Glyph-Jot.dmg", tag: "jot", macBundle: "dev.fru.jot.mac", group: "Layers"),
         ReleasedApp(id: "ibis", name: "Glyph Ibis", job: "What the world knows", group: "Layers", site: "https://glyph.fru.dev/ibis"),
-        ReleasedApp(id: "rig", name: "Glyph Rig", job: "Where your agents run", repo: "fru-dev3/glyph-native", asset: "Glyph-Rig.dmg", tag: "rig", macBundle: "dev.fru.rig", group: "Layers"),
-        ReleasedApp(id: "arena", name: "Glyph Arena", job: "The best recipe for each task",
-                    repo: "fru-dev3/glyph-arena", asset: "Glyph-Arena-mac-arm64.dmg", macBundle: "dev.fru.glyph.arena", group: "Tools"),
+        ReleasedApp(id: "rig", name: "Glyph Rig", job: "Where your agents run", repo: "fru-dev3/glyph-studio", asset: "Glyph-Rig.dmg", tag: "rig", macBundle: "dev.fru.rig", group: "Layers"),
+        // Arena's Mac app (0.3.0 on) is native and hosted like Rig's; glyph-arena keeps the old Tauri source.
+        ReleasedApp(id: "arena", name: "Glyph Arena", job: "The best recipe for each task", repo: "fru-dev3/glyph-studio", asset: "Glyph-Arena.dmg", tag: "arena", macBundle: "dev.fru.glyph.arena", group: "Tools"),
         ReleasedApp(id: "cast", name: "Glyph Cast", job: "Screen videos, cleaned up",
-                    repo: "fru-dev3/glyph-cast", asset: "Glyph-Cast.dmg", macBundle: "dev.fru.capture", group: "Tools"),
+                    repo: "fru-dev3/glyph-studio", asset: "Glyph-Cast.dmg", tag: "cast", macBundle: "dev.fru.capture", group: "Tools"),
         ReleasedApp(id: "time", name: "Glyph Time", job: "Where your hours go",
-                    repo: "fru-dev3/glyph-time", asset: "Glyph-Time.dmg", macBundle: "dev.fru.time", group: "Tools"),
-        ReleasedApp(id: "connect", name: "Glyph Connect", job: "Where tools plug in", repo: "fru-dev3/glyph-native", asset: "Glyph-Connect.dmg", tag: "connect", macBundle: "dev.fru.connect", group: "Tools"),
-        ReleasedApp(id: "well", name: "Glyph Well", job: "Fitness, nutrition and mood", repo: "fru-dev3/glyph-native", asset: "Glyph-Well.dmg", tag: "well", macBundle: "dev.fru.well", group: "Your life"),
-        ReleasedApp(id: "crm", name: "Glyph CRM", job: "People, places, products, things", repo: "fru-dev3/glyph-native", asset: "Glyph-CRM.dmg", tag: "crm", macBundle: "dev.fru.crm", group: "Your life"),
-        ReleasedApp(id: "omega", name: "Glyph Omega", job: "Mission, vision, values and goals", repo: "fru-dev3/glyph-native", asset: "Glyph-Omega.dmg", tag: "omega", macBundle: "dev.fru.omega", group: "Your life"),
-        ReleasedApp(id: "wealth", name: "Glyph Wealth", job: "Accounts, spending and what it means", repo: "fru-dev3/glyph-native", asset: "Glyph-Wealth.dmg", tag: "wealth", macBundle: "dev.fru.wealth", group: "Your life"),
-        ReleasedApp(id: "life", name: "Glyph Life", job: "Personal administration", repo: "fru-dev3/glyph-native", asset: "Glyph-Life.dmg", tag: "life", macBundle: "dev.fru.life", group: "Your life"),
+                    repo: "fru-dev3/glyph-studio", asset: "Glyph-Time.dmg", tag: "time", macBundle: "dev.fru.time", group: "Tools"),
+        ReleasedApp(id: "connect", name: "Glyph Connect", job: "Where tools plug in", repo: "fru-dev3/glyph-studio", asset: "Glyph-Connect.dmg", tag: "connect", macBundle: "dev.fru.connect", group: "Tools"),
+        ReleasedApp(id: "well", name: "Glyph Well", job: "Fitness, nutrition and mood", repo: "fru-dev3/glyph-studio", asset: "Glyph-Well.dmg", tag: "well", macBundle: "dev.fru.well", group: "Your life"),
+        ReleasedApp(id: "crm", name: "Glyph CRM", job: "People, places, products, things", repo: "fru-dev3/glyph-studio", asset: "Glyph-CRM.dmg", tag: "crm", macBundle: "dev.fru.crm", group: "Your life"),
+        ReleasedApp(id: "omega", name: "Glyph Omega", job: "Mission, vision, values and goals", repo: "fru-dev3/glyph-studio", asset: "Glyph-Omega.dmg", tag: "omega", macBundle: "dev.fru.omega", group: "Your life"),
+        ReleasedApp(id: "wealth", name: "Glyph Wealth", job: "Accounts, spending and what it means", repo: "fru-dev3/glyph-studio", asset: "Glyph-Wealth.dmg", tag: "wealth", macBundle: "dev.fru.wealth", group: "Your life"),
+        ReleasedApp(id: "life", name: "Glyph Life", job: "Personal administration", repo: "fru-dev3/glyph-studio", asset: "Glyph-Life.dmg", tag: "life", macBundle: "dev.fru.life", group: "Your life"),
         ReleasedApp(id: "travel", name: "Glyph X", job: "Trips, bookings and documents", macBundle: "dev.fru.travel", group: "Your life"),
     ]
 
@@ -119,9 +120,11 @@ public enum Release {
     /// Glyph Native's own download, for the one app this app cannot install the usual way: itself.
     /// A running app cannot be copied over, so the update is fetched and opened, and the person
     /// drags it across as they did the first time (Fru, 2026-11-15: "make the updates work").
-    public static let ownRepo = "fru-dev3/glyph-native"
-    public static var ownLatestURL: URL? { URL(string: "https://github.com/\(ownRepo)/releases/latest") }
-    public static var ownDownloadURL: URL? { URL(string: "https://github.com/\(ownRepo)/releases/latest/download/Glyph-Native.dmg") }
+    /// It sits on glyph-studio beside the others, under the rolling release "native", with its version in
+    /// version.txt: that repo's newest release is Glyph Bot's, so the latest redirect would name Bot's number.
+    public static let ownRepo = "fru-dev3/glyph-studio"
+    public static let ownDownloadURL = URL(string: "https://github.com/\(ownRepo)/releases/download/native/Glyph-Native.dmg")!
+    public static let ownVersionURL = URL(string: "https://github.com/\(ownRepo)/releases/download/native/version.txt")!
 
     /// The second line on a card whose new app is not installed while the retired one is.
     public static func retiredLine(retiredInstalled: Bool, installed: Bool, name: String) -> String? {

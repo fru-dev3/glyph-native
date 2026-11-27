@@ -10,7 +10,7 @@ import GlyphVault
 
 extension GlyphAgent {
     /// What every agent reads, and each agent's own scopes on top (Omega, the keeper, reads them all).
-    static let everyone: Set<String> = ["agents", "writing", "general"]
+    static let everyone: Set<String> = ["agents", "writing", "models", "tools", "general"]   // which engine and which apps: every agent's business
     static let ownScopes: [String: Set<String>] = [
         "time": ["schedule", "health"], "well": ["food", "health"], "crm": ["people"], "jot": ["design"], "travel": ["travel", "schedule"],
     ]
