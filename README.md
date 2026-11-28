@@ -1,62 +1,51 @@
 # Glyph Native
 
-**One install for every Glyph app.** Glyph Native shows the Glyph apps for the Mac in one window,
-installs the ones you want, and keeps them up to date.
+**Glyph is a free, local-first family of native Mac apps by [fru.dev](https://fru.dev).**
+Glyph Native is the one install: it lists every Glyph app, installs the ones you want and keeps them up to date.
 
-Part of the [Glyph family](https://glyph.fru.dev) by [fru.dev](https://fru.dev).
+[![Download Glyph Native for Mac](https://img.shields.io/badge/Download-Glyph%20Native%20for%20Mac-008000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/fru-dev3/glyph-studio/releases/download/native/Glyph-Native.dmg)
 
-## Install
+Open the disk image and drag Glyph Native to Applications. It is signed and notarized by Apple.
+Release notes and every earlier version: [the `native` release](https://github.com/fru-dev3/glyph-studio/releases/tag/native).
+More at [glyph.fru.dev](https://glyph.fru.dev).
 
-Download [Glyph-Native.dmg](https://github.com/fru-dev3/glyph-studio/releases/download/native/Glyph-Native.dmg)
-and drag Glyph Native to Applications. It is signed and notarized by Apple. Needs macOS 26 on
-Apple silicon.
+## Requirements
 
-## What is new in 0.6.3
+- A Mac with Apple silicon.
+- macOS 26 or later for most apps.
+- iPhone apps are in testing.
 
-- Six more apps install from here: Glyph Well, Wealth, CRM, Omega, Connect and Life. Each is signed and notarized by Apple, and Glyph Native offers the update when one has a newer version.
+## The apps
 
-## What is new in 0.6.2
-
-- A collapsed sidebar keeps its icons: every filter, group, the Vault and Settings stay one click away.
-
-## What is new in 0.6.1
-
-- A new About page: the family's icons with a tick on the ones installed, and one-click links to the
-  site, the release notes, the source and the license.
-
-## What is new in 0.6.0
-
-- Glyph Bot is the new native Mac app, and Glyph Native installs it. A Mac that still has the
-  earlier Glyph Bot sees a plain Install and a note that the earlier one is retired. It is never touched.
-- Choose which engine answers your chats, on the "Answers come from" settings page.
-- Pairing codes expire, so an old code cannot be reused.
-- Find your vault computer on your network.
-- The Vault page is one column and reads Connected, Checked or Not reachable.
-
-## Earlier: 0.5.0
-
-- A new window with a sidebar, groups, search and sort.
-- Every app in the family is listed. The ones you cannot download yet say Coming.
-- Uninstall an app to the Trash, and install it again whenever you like.
-- A Vault page with a first-run setup that picks and checks your vault folder.
-- Pair an iPhone by QR code. The codes expire.
-- Find your vault computer on the same network or over Tailscale.
-- Settings and About are a page of the window.
-- Light and dark.
-
-## What it installs
-
-| App | What it is for | Its own page |
+| App | What it does | Page |
 |---|---|---|
-| Glyph Bot | One harness for all your agents | [glyph.fru.dev/bot](https://glyph.fru.dev/bot) |
-| Glyph Jot | Personal context: notes, dictation and meetings | [glyph.fru.dev/jot](https://glyph.fru.dev/jot) |
-| Glyph Arena | The best AI model and recipe for each task | [glyph.fru.dev/arena](https://glyph.fru.dev/arena) |
-| Glyph Cast | Screen videos, cleaned up | [glyph.fru.dev/cast](https://glyph.fru.dev/cast) |
-| Glyph Time | Where your hours go | [glyph.fru.dev/time](https://glyph.fru.dev/time) |
+| Glyph Bot | One harness that builds, runs and watches your AI agents, with your vault behind them. Open source. | [glyph.fru.dev/bot](https://glyph.fru.dev/bot) |
+| Glyph Jot | Hold Fn to dictate into any app; record and transcribe meetings, on the Mac. | [glyph.fru.dev/jot](https://glyph.fru.dev/jot) |
+| Glyph Rig | Names, connects and runs Claude Code, Codex and Gemini sessions across your Macs. Open source. | [glyph.fru.dev/rig](https://glyph.fru.dev/rig) |
+| Glyph Time | A count-up on the screen's edge that shows where your hours go. | [glyph.fru.dev/time](https://glyph.fru.dev/time) |
+| Glyph Arena | Runs the same job across AI models and recipes and scores the results. | [glyph.fru.dev/arena](https://glyph.fru.dev/arena) |
+| Glyph Cast | Screen videos, cleaned up. | [glyph.fru.dev/cast](https://glyph.fru.dev/cast) |
+| Glyph Wealth | Accounts, balances and net worth, with no bank login. | [glyph.fru.dev](https://glyph.fru.dev) |
+| Glyph Well | A health and fitness log. | [glyph.fru.dev](https://glyph.fru.dev) |
+| Glyph Omega | Missions and goals. | [glyph.fru.dev](https://glyph.fru.dev) |
+| Glyph CRM | People and accounts. | [glyph.fru.dev](https://glyph.fru.dev) |
+| Glyph Connect | Connections for your agents. | [glyph.fru.dev](https://glyph.fru.dev) |
+| Glyph Life | Bills and renewals. | [glyph.fru.dev](https://glyph.fru.dev) |
 
-Each card says whether the app is on this Mac and which version, and carries one button:
-Install, Update or Open. Install All does every missing or older one in turn. Every app also
-installs on its own from its page.
+Every app is free. Glyph Native (this repository, MIT), Glyph Bot
+([glyph-studio](https://github.com/fru-dev3/glyph-studio)), its engine
+([glyph-engine](https://github.com/fru-dev3/glyph-engine)) and Glyph Rig
+([glyph](https://github.com/fru-dev3/glyph)) are open source. The other apps are free and their code is private for now.
+
+Each card in Glyph Native says whether the app is on this Mac and which version, with one button:
+Install, Update or Open. Every app also installs on its own from its page.
+
+## Privacy
+
+- Your data stays in files you own: on your Mac, or in a vault folder you choose.
+- fru.dev runs no server for the apps. There is no account to create.
+- Glyph Native reaches GitHub to read releases and download the apps. Pairing an iPhone and finding
+  your vault computer happen on your own network.
 
 ## How an install works
 
@@ -76,5 +65,9 @@ what you had. Update is offered only when the release is newer than what is inst
 scripts/build.sh                    # build/Glyph Native.app (SwiftPM, no Xcode project needed)
 scripts/test-install-release.sh     # the installer against a made-up app, no network
 ```
+
+## Feedback
+
+Questions and bugs: [open an issue](https://github.com/fru-dev3/glyph-native/issues).
 
 MIT. See LICENSE.
